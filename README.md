@@ -92,6 +92,73 @@ npm run build
 npm run dev
 ```
 
+## Deployment
+
+### Smithery Deployment
+
+The server is ready for deployment to Smithery:
+
+```bash
+# Build for production
+smithery build src/index.ts
+
+# Run locally for testing
+smithery dev src/index.ts
+
+# The server will be available at the provided URL
+```
+
+### Manual Deployment
+
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Build the project: `npm run build`
+4. Run the server: `npm start`
+
+## Testing
+
+```bash
+# Run basic functionality tests
+node test-simple.js
+
+# Run comprehensive tests
+node test-comprehensive.js
+
+# Run deployment readiness test
+node test-deployment.js
+```
+
+## Features Implemented
+
+✅ **Wallet Management**
+- Create new Solana wallets
+- Import existing wallets from private keys
+- List all managed wallets
+- Get wallet balances (SOL and SPL tokens)
+
+✅ **Transaction Operations**
+- Transfer SOL between wallets
+- Transfer SPL tokens
+- Request SOL airdrops (devnet/testnet only)
+- Get transaction details by signature
+
+✅ **Account Management**
+- Get detailed account information
+- Create associated token accounts
+- List all token accounts for a wallet
+- Get token balances
+
+✅ **Network Operations**
+- Switch between Solana networks (mainnet, devnet, testnet, localhost)
+- Get network information and status
+- Get recent blockhash for transaction building
+
+✅ **Performance Optimizations**
+- Lazy connection initialization (no startup timeouts)
+- Network call timeouts (10s default)
+- Comprehensive error handling
+- Production-ready deployment
+
 ## License
 
 MIT
