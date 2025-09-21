@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  InitializeRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -674,6 +675,20 @@ const server = new Server(
   }
 );
 
+// Initialize handler - REQUIRED for MCP protocol
+server.setRequestHandler(InitializeRequestSchema, async (request) => {
+  return {
+    protocolVersion: "2024-11-05",
+    capabilities: {
+      tools: {},
+    },
+    serverInfo: {
+      name: "solana-mcp-server",
+      version: "1.0.0",
+    },
+  };
+});
+
 // List tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools };
@@ -757,7 +772,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Start server
+// Export for Smithery
+export default function createServer({ config }: { config?: any }): Server {
+  return server;
+}
+
+// Start server (for standalone mode)
 async function main() {
   try {
     const transport = new StdioServerTransport();
@@ -769,7 +789,10 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error("Server error:", error);
-  process.exit(1);
-});
+// Only run standalone if this is the main module
+if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+  main().catch((error) => {
+    console.error("Server error:", error);
+    process.exit(1);
+  });
+}
