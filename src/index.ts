@@ -789,8 +789,8 @@ async function main() {
   }
 }
 
-// Only run standalone if this is the main module
-if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+// Only run standalone if this is the main module (ES modules check)
+if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWith('index.js')) {
   main().catch((error) => {
     console.error("Server error:", error);
     process.exit(1);
