@@ -1,0 +1,65 @@
+name: solana-mcp-server
+description: "Comprehensive Solana MCP server for wallet management, transaction handling, and program interactions on Solana blockchain"
+version: 1.0.0
+author: "ExpertVagabond"
+license: MIT
+runtime: "typescript"
+
+# Build configuration
+build:
+  type: docker
+  dockerfile: Dockerfile
+
+startCommand:
+  type: stdio
+  configSchema: {}
+  commandFunction: |
+    (config) => {
+      return {
+        command: "node",
+        args: ["dist/index.js"],
+        env: {}
+      };
+    }
+
+# Capabilities
+capabilities:
+  tools: 15
+  transport: ["stdio"]
+
+# Categories
+categories:
+  - blockchain
+  - solana
+  - defi
+  - wallet-management
+  - development-tools
+
+# Keywords
+keywords:
+  - solana
+  - blockchain
+  - wallet
+  - defi
+  - web3
+  - smart-contracts
+  - spl-tokens
+  - anchor
+
+# Environment
+environment:
+  node: ">=18.0.0"
+
+# Dependencies
+dependencies:
+  npm:
+    - "@solana/web3.js@latest"
+    - "@solana/spl-token@latest"
+    - "@coral-xyz/anchor@latest"
+  global: []
+  system: []
+
+# Test configuration
+test:
+  command: "node test-simple.js"
+  timeout: 30000

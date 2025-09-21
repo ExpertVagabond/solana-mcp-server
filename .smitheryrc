@@ -1,0 +1,20 @@
+{
+  "name": "solana-mcp-server",
+  "description": "Comprehensive Solana MCP server for wallet management, transaction handling, and program interactions on Solana blockchain",
+  "version": "1.0.0",
+  "entry": "./src/index.ts",
+  "build": {
+    "command": "npm run build",
+    "output": "./dist"
+  },
+  "test": {
+    "command": "node test-simple.js",
+    "timeout": 30000
+  },
+  "dependencies": {
+    "runtime": ["solana"]
+  },
+  "environment": {
+    "NODE_ENV": "production"
+  }
+}
