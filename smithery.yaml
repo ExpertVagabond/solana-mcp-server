@@ -4,6 +4,7 @@ version: 1.0.0
 author: "ExpertVagabond"
 license: MIT
 runtime: "typescript"
+remote: true
 
 # Build configuration
 build:
