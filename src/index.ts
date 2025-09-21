@@ -33,8 +33,24 @@ function initializeConnection(network: string = "devnet") {
   connection = new Connection(rpcUrl, "confirmed");
 }
 
-// Initialize with devnet by default
-initializeConnection();
+// Initialize connection lazily to avoid startup timeouts
+let connectionInitialized = false;
+
+function ensureConnection() {
+  if (!connectionInitialized) {
+    initializeConnection();
+    connectionInitialized = true;
+  }
+}
+
+// Add timeout wrapper for network calls
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Operation timed out')), timeoutMs);
+  });
+  
+  return Promise.race([promise, timeoutPromise]);
+}
 
 // Tool definitions
 const tools: Tool[] = [
@@ -334,7 +350,8 @@ async function handleGetBalance(args: any) {
     throw new Error(`Wallet '${walletName}' not found`);
   }
 
-  const balance = await connection.getBalance(wallet.keypair.publicKey);
+  ensureConnection();
+  const balance = await withTimeout(connection.getBalance(wallet.keypair.publicKey));
   const solBalance = balance / LAMPORTS_PER_SOL;
 
   return {
@@ -355,6 +372,7 @@ async function handleGetTokenBalance(args: any) {
     throw new Error(`Wallet '${walletName}' not found`);
   }
 
+  ensureConnection();
   try {
     const tokenMintPubkey = new PublicKey(tokenMint);
     const tokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
@@ -385,6 +403,7 @@ async function handleTransferSol(args: any) {
     throw new Error(`Wallet '${fromWallet}' not found`);
   }
 
+  ensureConnection();
   const toPubkey = new PublicKey(toAddress);
   const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
 
@@ -419,6 +438,7 @@ async function handleTransferTokens(args: any) {
     throw new Error(`Wallet '${fromWallet}' not found`);
   }
 
+  ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
   const toPubkey = new PublicKey(toAddress);
   
@@ -477,6 +497,7 @@ async function handleAirdropSol(args: any) {
     throw new Error(`Wallet '${walletName}' not found`);
   }
 
+  ensureConnection();
   const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
   const signature = await connection.requestAirdrop(wallet.keypair.publicKey, lamports);
 
@@ -491,6 +512,7 @@ async function handleAirdropSol(args: any) {
 async function handleGetAccountInfo(args: any) {
   const { address } = args;
   
+  ensureConnection();
   const pubkey = new PublicKey(address);
   const accountInfo = await connection.getAccountInfo(pubkey);
 
@@ -515,6 +537,7 @@ async function handleGetAccountInfo(args: any) {
 async function handleGetTransaction(args: any) {
   const { signature } = args;
   
+  ensureConnection();
   const transaction = await connection.getTransaction(signature, {
     commitment: "confirmed",
     maxSupportedTransactionVersion: 0
@@ -535,6 +558,7 @@ async function handleGetTransaction(args: any) {
 }
 
 async function handleGetRecentBlockhash() {
+  ensureConnection();
   const { blockhash } = await connection.getLatestBlockhash();
   
   return {
@@ -556,6 +580,7 @@ async function handleSwitchNetwork(args: any) {
 }
 
 async function handleGetNetworkInfo() {
+  ensureConnection();
   const version = await connection.getVersion();
   const epochInfo = await connection.getEpochInfo();
   
@@ -577,6 +602,7 @@ async function handleCreateTokenAccount(args: any) {
     throw new Error(`Wallet '${walletName}' not found`);
   }
 
+  ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
   const tokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
 
@@ -613,6 +639,7 @@ async function handleGetTokenAccounts(args: any) {
     throw new Error(`Wallet '${walletName}' not found`);
   }
 
+  ensureConnection();
   const tokenAccounts = await connection.getTokenAccountsByOwner(wallet.keypair.publicKey, {
     programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
   });
@@ -732,9 +759,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 // Start server
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Solana MCP server running on stdio");
+  try {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("Solana MCP server running on stdio");
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error("Server error:", error);
+  process.exit(1);
+});
