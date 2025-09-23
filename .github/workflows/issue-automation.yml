@@ -1,0 +1,84 @@
+name: Issue Automation
+
+on:
+  issues:
+    types: [opened, labeled, closed]
+  pull_request:
+    types: [opened, closed, merged]
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    
+    steps:
+    - name: Welcome new contributors
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          const issue = context.payload.issue || context.payload.pull_request;
+          
+          if (context.payload.issue) {
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issue.number,
+              body: `👋 Thank you for opening this issue! 
+
+We appreciate your contribution to the project. Our team will review this shortly.
+
+In the meantime, please make sure:
+- [ ] You've provided all the necessary information
+- [ ] You've checked existing issues for duplicates
+- [ ] You're following our [Code of Conduct](./CODE_OF_CONDUCT.md)
+
+If you're interested in working on this issue, feel free to comment below! 🚀`
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issue.number,
+              body: `🎉 Thank you for your contribution! 
+
+We appreciate your pull request. Our team will review this shortly.
+
+Please ensure:
+- [ ] All tests are passing
+- [ ] You've followed our [Contributing Guidelines](./CONTRIBUTING.md)
+- [ ] You've updated documentation if necessary
+
+Thanks for helping make this project better! 🙏`
+            });
+          }
+
+  auto-assign:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    
+    steps:
+    - name: Auto-assign issues
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          const issue = context.payload.issue;
+          
+          if (issue) {
+            // Auto-assign to repository owner
+            await github.rest.issues.addAssignees({
+              owner,
+              repo,
+              issue_number: issue.number,
+              assignees: ['ExpertVagabond']
+            });
+            
+            // Add triage label
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issue.number,
+              labels: ['triage']
+            });
+          }
