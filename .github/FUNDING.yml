@@ -1,0 +1,22 @@
+# GitHub Sponsors & Funding Configuration
+
+# GitHub Sponsors
+github: ExpertVagabond
+
+# Alternative funding platforms
+patreon: expertvagabond
+open_collective: expertvagabond
+ko_fi: expertvagabond
+tidelift: "npm/expertvagabond"
+community_bridge: expertvagabond
+liberapay: expertvagabond
+issuehunt: ExpertVagabond
+
+# Custom funding URLs
+custom: [
+  'https://zetachain.com/sponsor',
+  'https://buymeacoffee.com/expertvagabond',
+  'https://paypal.me/expertvagabond',
+  'https://cash.app/$expertvagabond',
+  'https://venmo.com/expertvagabond'
+]
