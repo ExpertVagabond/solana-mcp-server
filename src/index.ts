@@ -9,7 +9,23 @@ import {
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount } from "@solana/spl-token";
+import {
+  createTransferInstruction,
+  getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction,
+  getAccount,
+  createMint,
+  mintTo,
+  burn,
+  freezeAccount,
+  thawAccount,
+  setAuthority,
+  AuthorityType,
+  getMint,
+  closeAccount,
+  approve,
+  revoke
+} from "@solana/spl-token";
 import bs58 from "bs58";
 import { z } from "zod";
 
@@ -282,6 +298,227 @@ const tools: Tool[] = [
         }
       },
       required: ["walletName"]
+    }
+  },
+  {
+    name: "create_spl_token",
+    description: "Create a new SPL token with specified decimals",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet that will be the mint authority"
+        },
+        decimals: {
+          type: "number",
+          description: "Number of decimal places for the token (default: 9)"
+        },
+        freezeAuthority: {
+          type: "boolean",
+          description: "Whether to enable freeze authority (default: false)"
+        }
+      },
+      required: ["walletName"]
+    }
+  },
+  {
+    name: "mint_tokens",
+    description: "Mint tokens to a specific account",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet with mint authority"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        destinationAddress: {
+          type: "string",
+          description: "Destination wallet address"
+        },
+        amount: {
+          type: "number",
+          description: "Amount of tokens to mint (in token units, not raw)"
+        }
+      },
+      required: ["walletName", "tokenMint", "destinationAddress", "amount"]
+    }
+  },
+  {
+    name: "burn_tokens",
+    description: "Burn tokens from a wallet",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet to burn tokens from"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        amount: {
+          type: "number",
+          description: "Amount of tokens to burn (in token units)"
+        }
+      },
+      required: ["walletName", "tokenMint", "amount"]
+    }
+  },
+  {
+    name: "freeze_account",
+    description: "Freeze a token account to prevent transfers",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet with freeze authority"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        accountAddress: {
+          type: "string",
+          description: "Address of the token account to freeze"
+        }
+      },
+      required: ["walletName", "tokenMint", "accountAddress"]
+    }
+  },
+  {
+    name: "thaw_account",
+    description: "Thaw a frozen token account to allow transfers",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet with freeze authority"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        accountAddress: {
+          type: "string",
+          description: "Address of the token account to thaw"
+        }
+      },
+      required: ["walletName", "tokenMint", "accountAddress"]
+    }
+  },
+  {
+    name: "set_token_authority",
+    description: "Set or change authority for a token mint or account",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet with current authority"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        authorityType: {
+          type: "string",
+          enum: ["MintTokens", "FreezeAccount", "AccountOwner", "CloseAccount"],
+          description: "Type of authority to set"
+        },
+        newAuthority: {
+          type: "string",
+          description: "Address of new authority (or null to revoke authority)"
+        }
+      },
+      required: ["walletName", "tokenMint", "authorityType"]
+    }
+  },
+  {
+    name: "get_token_supply",
+    description: "Get the total supply of a token",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        }
+      },
+      required: ["tokenMint"]
+    }
+  },
+  {
+    name: "close_token_account",
+    description: "Close a token account and reclaim rent",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet that owns the account"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        destinationAddress: {
+          type: "string",
+          description: "Address to send remaining lamports to"
+        }
+      },
+      required: ["walletName", "tokenMint", "destinationAddress"]
+    }
+  },
+  {
+    name: "approve_delegate",
+    description: "Approve a delegate to transfer tokens on your behalf",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet that owns the tokens"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        },
+        delegateAddress: {
+          type: "string",
+          description: "Address of the delegate"
+        },
+        amount: {
+          type: "number",
+          description: "Maximum amount delegate can transfer"
+        }
+      },
+      required: ["walletName", "tokenMint", "delegateAddress", "amount"]
+    }
+  },
+  {
+    name: "revoke_delegate",
+    description: "Revoke a delegate's authority to transfer tokens",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet that owns the tokens"
+        },
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        }
+      },
+      required: ["walletName", "tokenMint"]
     }
   }
 ];
@@ -662,6 +899,349 @@ async function handleGetTokenAccounts(args: any) {
   };
 }
 
+async function handleCreateSplToken(args: any) {
+  const { walletName, decimals = 9, freezeAuthority = false } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+
+  const freezeAuthorityPubkey = freezeAuthority ? wallet.keypair.publicKey : null;
+
+  const mint = await createMint(
+    connection,
+    wallet.keypair,
+    wallet.keypair.publicKey,
+    freezeAuthorityPubkey,
+    decimals
+  );
+
+  return {
+    success: true,
+    tokenMint: mint.toString(),
+    decimals,
+    mintAuthority: wallet.keypair.publicKey.toString(),
+    freezeAuthority: freezeAuthorityPubkey ? freezeAuthorityPubkey.toString() : null,
+    explorerUrl: `https://explorer.solana.com/address/${mint.toString()}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleMintTokens(args: any) {
+  const { walletName, tokenMint, destinationAddress, amount } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const destinationPubkey = new PublicKey(destinationAddress);
+
+  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+
+  const destinationTokenAccount = await getAssociatedTokenAddress(
+    tokenMintPubkey,
+    destinationPubkey
+  );
+
+  // Check if destination token account exists, create if not
+  try {
+    await getAccount(connection, destinationTokenAccount);
+  } catch {
+    const transaction = new Transaction().add(
+      createAssociatedTokenAccountInstruction(
+        wallet.keypair.publicKey,
+        destinationTokenAccount,
+        destinationPubkey,
+        tokenMintPubkey
+      )
+    );
+
+    const { blockhash } = await connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = wallet.keypair.publicKey;
+    transaction.sign(wallet.keypair);
+
+    await connection.sendTransaction(transaction, [wallet.keypair]);
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for account creation
+  }
+
+  const signature = await mintTo(
+    connection,
+    wallet.keypair,
+    tokenMintPubkey,
+    destinationTokenAccount,
+    wallet.keypair,
+    rawAmount
+  );
+
+  return {
+    success: true,
+    signature,
+    amount,
+    tokenMint: tokenMint,
+    destination: destinationAddress,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleBurnTokens(args: any) {
+  const { walletName, tokenMint, amount } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+
+  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+
+  const tokenAccount = await getAssociatedTokenAddress(
+    tokenMintPubkey,
+    wallet.keypair.publicKey
+  );
+
+  const signature = await burn(
+    connection,
+    wallet.keypair,
+    tokenAccount,
+    tokenMintPubkey,
+    wallet.keypair,
+    rawAmount
+  );
+
+  return {
+    success: true,
+    signature,
+    amount,
+    tokenMint: tokenMint,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleFreezeAccount(args: any) {
+  const { walletName, tokenMint, accountAddress } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const accountPubkey = new PublicKey(accountAddress);
+
+  const signature = await freezeAccount(
+    connection,
+    wallet.keypair,
+    accountPubkey,
+    tokenMintPubkey,
+    wallet.keypair
+  );
+
+  return {
+    success: true,
+    signature,
+    accountAddress,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleThawAccount(args: any) {
+  const { walletName, tokenMint, accountAddress } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const accountPubkey = new PublicKey(accountAddress);
+
+  const signature = await thawAccount(
+    connection,
+    wallet.keypair,
+    accountPubkey,
+    tokenMintPubkey,
+    wallet.keypair
+  );
+
+  return {
+    success: true,
+    signature,
+    accountAddress,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleSetTokenAuthority(args: any) {
+  const { walletName, tokenMint, authorityType, newAuthority } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const newAuthorityPubkey = newAuthority ? new PublicKey(newAuthority) : null;
+
+  const authorityTypeMap: { [key: string]: AuthorityType } = {
+    "MintTokens": AuthorityType.MintTokens,
+    "FreezeAccount": AuthorityType.FreezeAccount,
+    "AccountOwner": AuthorityType.AccountOwner,
+    "CloseAccount": AuthorityType.CloseAccount
+  };
+
+  const signature = await setAuthority(
+    connection,
+    wallet.keypair,
+    tokenMintPubkey,
+    wallet.keypair,
+    authorityTypeMap[authorityType],
+    newAuthorityPubkey
+  );
+
+  return {
+    success: true,
+    signature,
+    authorityType,
+    newAuthority: newAuthority || "revoked",
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleGetTokenSupply(args: any) {
+  const { tokenMint } = args;
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+
+  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const supply = Number(mintInfo.supply) / Math.pow(10, mintInfo.decimals);
+
+  return {
+    tokenMint,
+    supply,
+    rawSupply: mintInfo.supply.toString(),
+    decimals: mintInfo.decimals,
+    mintAuthority: mintInfo.mintAuthority ? mintInfo.mintAuthority.toString() : null,
+    freezeAuthority: mintInfo.freezeAuthority ? mintInfo.freezeAuthority.toString() : null,
+    isInitialized: mintInfo.isInitialized
+  };
+}
+
+async function handleCloseTokenAccount(args: any) {
+  const { walletName, tokenMint, destinationAddress } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const destinationPubkey = new PublicKey(destinationAddress);
+
+  const tokenAccount = await getAssociatedTokenAddress(
+    tokenMintPubkey,
+    wallet.keypair.publicKey
+  );
+
+  const signature = await closeAccount(
+    connection,
+    wallet.keypair,
+    tokenAccount,
+    destinationPubkey,
+    wallet.keypair
+  );
+
+  return {
+    success: true,
+    signature,
+    closedAccount: tokenAccount.toString(),
+    destination: destinationAddress,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleApproveDelegate(args: any) {
+  const { walletName, tokenMint, delegateAddress, amount } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const delegatePubkey = new PublicKey(delegateAddress);
+
+  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+
+  const tokenAccount = await getAssociatedTokenAddress(
+    tokenMintPubkey,
+    wallet.keypair.publicKey
+  );
+
+  const signature = await approve(
+    connection,
+    wallet.keypair,
+    tokenAccount,
+    delegatePubkey,
+    wallet.keypair,
+    rawAmount
+  );
+
+  return {
+    success: true,
+    signature,
+    delegate: delegateAddress,
+    amount,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
+async function handleRevokeDelegate(args: any) {
+  const { walletName, tokenMint } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+
+  const tokenAccount = await getAssociatedTokenAddress(
+    tokenMintPubkey,
+    wallet.keypair.publicKey
+  );
+
+  const signature = await revoke(
+    connection,
+    wallet.keypair,
+    tokenAccount,
+    wallet.keypair
+  );
+
+  return {
+    success: true,
+    signature,
+    explorerUrl: `https://explorer.solana.com/tx/${signature}?cluster=${currentNetwork}`
+  };
+}
+
 // Main server setup
 const server = new Server(
   {
@@ -746,6 +1326,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "get_token_accounts":
         result = await handleGetTokenAccounts(args);
+        break;
+      case "create_spl_token":
+        result = await handleCreateSplToken(args);
+        break;
+      case "mint_tokens":
+        result = await handleMintTokens(args);
+        break;
+      case "burn_tokens":
+        result = await handleBurnTokens(args);
+        break;
+      case "freeze_account":
+        result = await handleFreezeAccount(args);
+        break;
+      case "thaw_account":
+        result = await handleThawAccount(args);
+        break;
+      case "set_token_authority":
+        result = await handleSetTokenAuthority(args);
+        break;
+      case "get_token_supply":
+        result = await handleGetTokenSupply(args);
+        break;
+      case "close_token_account":
+        result = await handleCloseTokenAccount(args);
+        break;
+      case "approve_delegate":
+        result = await handleApproveDelegate(args);
+        break;
+      case "revoke_delegate":
+        result = await handleRevokeDelegate(args);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);
