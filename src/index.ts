@@ -29,12 +29,13 @@ import {
 import bs58 from "bs58";
 import { z } from "zod";
 
-// Solana network configurations
+// Solana network configurations with environment variable support
 const NETWORKS = {
-  mainnet: "https://api.mainnet-beta.solana.com",
-  devnet: "https://api.devnet.solana.com",
-  testnet: "https://api.testnet.solana.com",
-  localhost: "http://127.0.0.1:8899"
+  mainnet: process.env.SOLANA_MAINNET_RPC || "https://api.mainnet-beta.solana.com",
+  devnet: process.env.SOLANA_DEVNET_RPC || "https://api.devnet.solana.com",
+  testnet: process.env.SOLANA_TESTNET_RPC || "https://api.testnet.solana.com",
+  localhost: process.env.SOLANA_LOCALHOST_RPC || "http://127.0.0.1:8899",
+  custom: process.env.SOLANA_CUSTOM_RPC || ""
 };
 
 // Wallet storage (in production, use secure storage)
@@ -519,6 +520,68 @@ const tools: Tool[] = [
         }
       },
       required: ["walletName", "tokenMint"]
+    }
+  },
+  {
+    name: "health_check",
+    description: "Check server and network connection health",
+    inputSchema: {
+      type: "object",
+      properties: {}
+    }
+  },
+  {
+    name: "get_transaction_history",
+    description: "Get transaction history for a wallet",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet"
+        },
+        limit: {
+          type: "number",
+          description: "Number of transactions to fetch (default: 10, max: 100)"
+        },
+        before: {
+          type: "string",
+          description: "Transaction signature to paginate before"
+        }
+      },
+      required: ["walletName"]
+    }
+  },
+  {
+    name: "get_token_info",
+    description: "Get token metadata including name, symbol, logo, and price",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tokenMint: {
+          type: "string",
+          description: "Token mint address"
+        }
+      },
+      required: ["tokenMint"]
+    }
+  },
+  {
+    name: "get_all_token_balances",
+    description: "Get all SPL token balances for a wallet at once",
+    inputSchema: {
+      type: "object",
+      properties: {
+        walletName: {
+          type: "string",
+          description: "Name of the wallet"
+        },
+        includeZeroBalances: {
+          type: "boolean",
+          description: "Include tokens with zero balance (default: false)"
+        }
+      },
+      required: ["walletName"]
     }
   }
 ];
@@ -1242,6 +1305,178 @@ async function handleRevokeDelegate(args: any) {
   };
 }
 
+async function handleHealthCheck() {
+  const checks = {
+    server: "healthy",
+    network: currentNetwork,
+    rpcUrl: NETWORKS[currentNetwork as keyof typeof NETWORKS],
+    connection: "unknown",
+    walletsLoaded: wallets.size,
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    ensureConnection();
+    const version = await withTimeout(connection.getVersion(), 5000);
+    checks.connection = "healthy";
+    return {
+      status: "healthy",
+      checks,
+      solanaVersion: version["solana-core"]
+    };
+  } catch (error) {
+    checks.connection = "unhealthy";
+    return {
+      status: "degraded",
+      checks,
+      error: error instanceof Error ? error.message : "Unknown error"
+    };
+  }
+}
+
+async function handleGetTransactionHistory(args: any) {
+  const { walletName, limit = 10, before } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const options: any = { limit: Math.min(limit, 100) };
+  if (before) {
+    options.before = before;
+  }
+
+  const signatures = await connection.getSignaturesForAddress(
+    wallet.keypair.publicKey,
+    options
+  );
+
+  const transactions = await Promise.all(
+    signatures.map(async (sig) => {
+      try {
+        const tx = await connection.getTransaction(sig.signature, {
+          maxSupportedTransactionVersion: 0,
+          commitment: "confirmed"
+        });
+        return {
+          signature: sig.signature,
+          slot: sig.slot,
+          timestamp: sig.blockTime,
+          status: sig.err ? "failed" : "success",
+          fee: tx?.meta?.fee,
+          err: sig.err,
+          explorerUrl: `https://explorer.solana.com/tx/${sig.signature}?cluster=${currentNetwork}`
+        };
+      } catch (error) {
+        return {
+          signature: sig.signature,
+          slot: sig.slot,
+          timestamp: sig.blockTime,
+          status: sig.err ? "failed" : "success",
+          error: "Failed to fetch transaction details",
+          explorerUrl: `https://explorer.solana.com/tx/${sig.signature}?cluster=${currentNetwork}`
+        };
+      }
+    })
+  );
+
+  return {
+    wallet: walletName,
+    address: wallet.keypair.publicKey.toString(),
+    transactions,
+    count: transactions.length,
+    hasMore: transactions.length === options.limit
+  };
+}
+
+async function handleGetTokenInfo(args: any) {
+  const { tokenMint } = args;
+
+  try {
+    // Fetch from Jupiter token list
+    const response = await withTimeout(
+      fetch('https://token.jup.ag/strict'),
+      10000
+    );
+    const tokens = await response.json();
+    const tokenInfo = tokens.find((t: any) => t.address === tokenMint);
+
+    if (!tokenInfo) {
+      return {
+        tokenMint,
+        found: false,
+        message: "Token not found in Jupiter token list"
+      };
+    }
+
+    // Get price from Jupiter (optional, may fail for some tokens)
+    let price = null;
+    try {
+      const priceResponse = await withTimeout(
+        fetch(`https://price.jup.ag/v6/price?ids=${tokenMint}`),
+        5000
+      );
+      const priceData = await priceResponse.json();
+      price = priceData.data?.[tokenMint]?.price || null;
+    } catch {
+      // Price fetch failed, continue without price
+    }
+
+    return {
+      address: tokenInfo.address,
+      name: tokenInfo.name,
+      symbol: tokenInfo.symbol,
+      decimals: tokenInfo.decimals,
+      logoURI: tokenInfo.logoURI,
+      price,
+      found: true
+    };
+  } catch (error) {
+    return {
+      tokenMint,
+      found: false,
+      error: error instanceof Error ? error.message : "Failed to fetch token info"
+    };
+  }
+}
+
+async function handleGetAllTokenBalances(args: any) {
+  const { walletName, includeZeroBalances = false } = args;
+
+  const wallet = wallets.get(walletName);
+  if (!wallet) {
+    throw new Error(`Wallet '${walletName}' not found`);
+  }
+
+  ensureConnection();
+  const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+    wallet.keypair.publicKey,
+    { programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") }
+  );
+
+  const balances = tokenAccounts.value
+    .map(account => {
+      const data = account.account.data.parsed.info;
+      return {
+        mint: data.mint,
+        balance: data.tokenAmount.uiAmount,
+        decimals: data.tokenAmount.decimals,
+        rawBalance: data.tokenAmount.amount,
+        account: account.pubkey.toString()
+      };
+    })
+    .filter(token => includeZeroBalances || token.balance > 0);
+
+  return {
+    wallet: walletName,
+    address: wallet.keypair.publicKey.toString(),
+    tokens: balances,
+    count: balances.length
+  };
+}
+
 // Main server setup
 const server = new Server(
   {
@@ -1356,6 +1591,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case "revoke_delegate":
         result = await handleRevokeDelegate(args);
+        break;
+      case "health_check":
+        result = await handleHealthCheck();
+        break;
+      case "get_transaction_history":
+        result = await handleGetTransactionHistory(args);
+        break;
+      case "get_token_info":
+        result = await handleGetTokenInfo(args);
+        break;
+      case "get_all_token_balances":
+        result = await handleGetAllTokenBalances(args);
         break;
       default:
         throw new Error(`Unknown tool: ${name}`);

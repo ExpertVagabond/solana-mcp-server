@@ -44,6 +44,21 @@ npm install
 npm run build
 ```
 
+### Environment Configuration
+
+You can customize RPC endpoints using environment variables:
+
+```bash
+# Custom RPC endpoints
+export SOLANA_MAINNET_RPC="https://your-premium-rpc.com"
+export SOLANA_DEVNET_RPC="https://your-devnet-rpc.com"
+export SOLANA_TESTNET_RPC="https://your-testnet-rpc.com"
+export SOLANA_CUSTOM_RPC="https://helius-rpc.com"
+
+# Then start the server
+npm start
+```
+
 ## Usage
 
 ### Start the server
@@ -87,6 +102,12 @@ npm start
 - `switch_network` - Switch Solana network
 - `get_network_info` - Get current network information
 - `get_recent_blockhash` - Get recent blockhash
+- `health_check` - Check server and network connection health
+
+#### Transaction & Analytics
+- `get_transaction_history` - Get transaction history for a wallet with pagination
+- `get_token_info` - Get token metadata (name, symbol, logo, price from Jupiter)
+- `get_all_token_balances` - Get all SPL token balances at once (batch operation)
 
 ## Supported Networks
 
