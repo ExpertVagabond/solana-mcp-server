@@ -1,6 +1,7 @@
 {
-  "name": "@ExpertVagabond/solana-mcp-server",
-  "version": "1.0.0",
+  "name": "solana-mcp-server",
+  "mcpName": "io.github.ExpertVagabond/solana",
+  "version": "1.0.1",
   "description": "Solana MCP server for wallet management, transaction handling, and program interactions on Solana blockchain",
   "main": "dist/index.js",
   "module": "./src/index.ts",
