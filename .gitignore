@@ -1,9 +1,1 @@
-node_modules/
-dist/
-*.log
-.env
-.DS_Store
-*.key
-*.json
-!package.json
-!tsconfig.json
+target/
