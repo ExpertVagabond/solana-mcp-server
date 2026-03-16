@@ -1,22 +1,14 @@
-FROM node:18-alpine
-
-# Set working directory
+FROM node:18-alpine AS builder
 WORKDIR /app
-
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+RUN npm ci
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Expose port (if needed for HTTP transport)
+FROM node:18-alpine
+WORKDIR /app
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
+RUN npm ci --omit=dev
 EXPOSE 3000
-
-# Start the application
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["node", "dist/index.js"]
