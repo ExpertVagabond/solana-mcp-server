@@ -1,7 +1,7 @@
 #![recursion_limit = "512"]
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::BufRead;
 use tracing::info;
@@ -16,7 +16,8 @@ static NETWORKS: &[(&str, &str)] = &[
 ];
 
 fn rpc_url(network: &str) -> String {
-    NETWORKS.iter()
+    NETWORKS
+        .iter()
         .find(|(n, _)| *n == network)
         .map(|(_, u)| u.to_string())
         .unwrap_or_else(|| "https://api.devnet.solana.com".to_string())
@@ -55,9 +56,13 @@ impl AppState {
             "method": method,
             "params": params
         });
-        let resp = self.client.post(&self.rpc_url())
+        let resp = self
+            .client
+            .post(self.rpc_url())
             .json(&body)
-            .send().await.map_err(|e| format!("RPC error: {e}"))?;
+            .send()
+            .await
+            .map_err(|e| format!("RPC error: {e}"))?;
         let val: Value = resp.json().await.map_err(|e| format!("Parse error: {e}"))?;
         if let Some(err) = val.get("error") {
             return Err(format!("RPC error: {}", err));
@@ -66,12 +71,14 @@ impl AppState {
     }
 
     fn get_wallet(&self, name: &str) -> Result<&Wallet, String> {
-        self.wallets.get(name).ok_or_else(|| format!("Wallet '{}' not found", name))
+        self.wallets
+            .get(name)
+            .ok_or_else(|| format!("Wallet '{}' not found", name))
     }
 }
 
 fn generate_keypair() -> ([u8; 64], [u8; 32], String) {
-    use ed25519_dalek::{SigningKey, Signer};
+    use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
     let signing_key = SigningKey::generate(&mut OsRng);
     let verifying_key = signing_key.verifying_key();
@@ -398,13 +405,18 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             }
             let (secret, pubkey, address) = generate_keypair();
             let pk_b58 = bs58::encode(&secret).into_string();
-            state.wallets.insert(wname.to_string(), Wallet {
-                name: wname.to_string(),
-                secret_key: secret,
-                public_key: pubkey,
-                address: address.clone(),
-            });
-            Ok(json!({"success": true, "wallet": {"name": wname, "address": address, "privateKey": pk_b58}}))
+            state.wallets.insert(
+                wname.to_string(),
+                Wallet {
+                    name: wname.to_string(),
+                    secret_key: secret,
+                    public_key: pubkey,
+                    address: address.clone(),
+                },
+            );
+            Ok(
+                json!({"success": true, "wallet": {"name": wname, "address": address, "privateKey": pk_b58}}),
+            )
         }
         "import_wallet" => {
             let wname = args["name"].as_str().ok_or("name required")?;
@@ -412,7 +424,9 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             if state.wallets.contains_key(wname) {
                 return Err(format!("Wallet '{}' already exists", wname));
             }
-            let decoded = bs58::decode(pk_str).into_vec().map_err(|e| format!("Invalid base58: {e}"))?;
+            let decoded = bs58::decode(pk_str)
+                .into_vec()
+                .map_err(|e| format!("Invalid base58: {e}"))?;
             if decoded.len() != 64 {
                 return Err("Private key must be 64 bytes (keypair)".to_string());
             }
@@ -421,16 +435,21 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             let mut pubkey = [0u8; 32];
             pubkey.copy_from_slice(&secret[32..]);
             let address = bs58::encode(&pubkey).into_string();
-            state.wallets.insert(wname.to_string(), Wallet {
-                name: wname.to_string(),
-                secret_key: secret,
-                public_key: pubkey,
-                address: address.clone(),
-            });
+            state.wallets.insert(
+                wname.to_string(),
+                Wallet {
+                    name: wname.to_string(),
+                    secret_key: secret,
+                    public_key: pubkey,
+                    address: address.clone(),
+                },
+            );
             Ok(json!({"success": true, "wallet": {"name": wname, "address": address}}))
         }
         "list_wallets" => {
-            let list: Vec<Value> = state.wallets.values()
+            let list: Vec<Value> = state
+                .wallets
+                .values()
                 .map(|w| json!({"name": w.name, "address": w.address}))
                 .collect();
             Ok(json!({"wallets": list, "count": list.len()}))
@@ -441,26 +460,37 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             let result = state.rpc("getBalance", json!([wallet.address])).await?;
             let lamports = result["value"].as_u64().unwrap_or(0);
             let sol = lamports as f64 / LAMPORTS_PER_SOL as f64;
-            Ok(json!({"wallet": wname, "address": wallet.address, "balance": {"lamports": lamports, "sol": sol}}))
+            Ok(
+                json!({"wallet": wname, "address": wallet.address, "balance": {"lamports": lamports, "sol": sol}}),
+            )
         }
         "get_token_balance" => {
             let wname = args["walletName"].as_str().ok_or("walletName required")?;
             let token_mint = args["tokenMint"].as_str().ok_or("tokenMint required")?;
             let wallet = state.get_wallet(wname)?;
-            let result = state.rpc("getTokenAccountsByOwner", json!([
-                wallet.address,
-                {"mint": token_mint},
-                {"encoding": "jsonParsed"}
-            ])).await?;
+            let result = state
+                .rpc(
+                    "getTokenAccountsByOwner",
+                    json!([
+                        wallet.address,
+                        {"mint": token_mint},
+                        {"encoding": "jsonParsed"}
+                    ]),
+                )
+                .await?;
             let accounts = result["value"].as_array();
-            if let Some(accts) = accounts {
-                if let Some(first) = accts.first() {
-                    let info = &first["account"]["data"]["parsed"]["info"];
-                    let amount = info["tokenAmount"]["uiAmountString"].as_str().unwrap_or("0");
-                    return Ok(json!({"wallet": wname, "tokenMint": token_mint, "balance": amount}));
-                }
+            if let Some(accts) = accounts
+                && let Some(first) = accts.first()
+            {
+                let info = &first["account"]["data"]["parsed"]["info"];
+                let amount = info["tokenAmount"]["uiAmountString"]
+                    .as_str()
+                    .unwrap_or("0");
+                return Ok(json!({"wallet": wname, "tokenMint": token_mint, "balance": amount}));
             }
-            Ok(json!({"wallet": wname, "tokenMint": token_mint, "balance": "0", "error": "Token account not found"}))
+            Ok(
+                json!({"wallet": wname, "tokenMint": token_mint, "balance": "0", "error": "Token account not found"}),
+            )
         }
         "transfer_sol" => {
             let from = args["fromWallet"].as_str().ok_or("fromWallet required")?;
@@ -470,9 +500,13 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             let lamports = (amount * LAMPORTS_PER_SOL as f64) as u64;
 
             let bh_result = state.rpc("getLatestBlockhash", json!([])).await?;
-            let blockhash = bh_result["value"]["blockhash"].as_str().ok_or("No blockhash")?;
+            let blockhash = bh_result["value"]["blockhash"]
+                .as_str()
+                .ok_or("No blockhash")?;
 
-            let from_bytes = bs58::decode(&wallet.address).into_vec().map_err(|e| format!("{e}"))?;
+            let from_bytes = bs58::decode(&wallet.address)
+                .into_vec()
+                .map_err(|e| format!("{e}"))?;
             let to_bytes = bs58::decode(to).into_vec().map_err(|e| format!("{e}"))?;
 
             // Build a SystemProgram.Transfer transaction
@@ -489,7 +523,9 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             tx_message.extend_from_slice(&to_bytes);
             tx_message.extend_from_slice(&system_program);
             // Recent blockhash
-            let bh_bytes = bs58::decode(blockhash).into_vec().map_err(|e| format!("{e}"))?;
+            let bh_bytes = bs58::decode(blockhash)
+                .into_vec()
+                .map_err(|e| format!("{e}"))?;
             tx_message.extend_from_slice(&bh_bytes);
             // Instructions: 1 instruction
             tx_message.push(1); // compact array length
@@ -518,7 +554,9 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             full_tx.extend_from_slice(&tx_message);
 
             let tx_b64 = base64_encode(&full_tx);
-            let send_result = state.rpc("sendTransaction", json!([tx_b64, {"encoding": "base64"}])).await?;
+            let send_result = state
+                .rpc("sendTransaction", json!([tx_b64, {"encoding": "base64"}]))
+                .await?;
             let sig_str = send_result.as_str().unwrap_or("unknown");
             Ok(json!({
                 "success": true,
@@ -542,7 +580,9 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             }
             let wallet = state.get_wallet(wname)?;
             let lamports = (amount * LAMPORTS_PER_SOL as f64) as u64;
-            let result = state.rpc("requestAirdrop", json!([wallet.address, lamports])).await?;
+            let result = state
+                .rpc("requestAirdrop", json!([wallet.address, lamports]))
+                .await?;
             let sig = result.as_str().unwrap_or("unknown");
             Ok(json!({
                 "success": true, "signature": sig, "amount": amount,
@@ -551,7 +591,12 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         }
         "get_account_info" => {
             let address = args["address"].as_str().ok_or("address required")?;
-            let result = state.rpc("getAccountInfo", json!([address, {"encoding": "jsonParsed"}])).await?;
+            let result = state
+                .rpc(
+                    "getAccountInfo",
+                    json!([address, {"encoding": "jsonParsed"}]),
+                )
+                .await?;
             if result["value"].is_null() {
                 return Ok(json!({"address": address, "exists": false}));
             }
@@ -568,7 +613,12 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         }
         "get_transaction" => {
             let sig = args["signature"].as_str().ok_or("signature required")?;
-            let result = state.rpc("getTransaction", json!([sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}])).await?;
+            let result = state
+                .rpc(
+                    "getTransaction",
+                    json!([sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}]),
+                )
+                .await?;
             if result.is_null() {
                 return Err("Transaction not found".to_string());
             }
@@ -602,46 +652,58 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
                 "slotsInEpoch": epoch["slotsInEpoch"]
             }))
         }
-        "create_token_account" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token create-account <TOKEN_MINT>", "network": state.current_network}))
-        }
+        "create_token_account" => Ok(
+            json!({"info": "Use Solana CLI: spl-token create-account <TOKEN_MINT>", "network": state.current_network}),
+        ),
         "get_token_accounts" => {
             let wname = args["walletName"].as_str().ok_or("walletName required")?;
             let wallet = state.get_wallet(wname)?;
-            let result = state.rpc("getTokenAccountsByOwner", json!([
-                wallet.address,
-                {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
-                {"encoding": "jsonParsed"}
-            ])).await?;
-            let accounts: Vec<Value> = result["value"].as_array().unwrap_or(&vec![]).iter().map(|a| {
-                let info = &a["account"]["data"]["parsed"]["info"];
-                json!({
-                    "address": a["pubkey"],
-                    "mint": info["mint"],
-                    "amount": info["tokenAmount"]["uiAmountString"],
-                    "decimals": info["tokenAmount"]["decimals"]
+            let result = state
+                .rpc(
+                    "getTokenAccountsByOwner",
+                    json!([
+                        wallet.address,
+                        {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"},
+                        {"encoding": "jsonParsed"}
+                    ]),
+                )
+                .await?;
+            let accounts: Vec<Value> = result["value"]
+                .as_array()
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|a| {
+                    let info = &a["account"]["data"]["parsed"]["info"];
+                    json!({
+                        "address": a["pubkey"],
+                        "mint": info["mint"],
+                        "amount": info["tokenAmount"]["uiAmountString"],
+                        "decimals": info["tokenAmount"]["decimals"]
+                    })
                 })
-            }).collect();
+                .collect();
             Ok(json!({"wallet": wname, "tokenAccounts": accounts, "count": accounts.len()}))
         }
-        "create_spl_token" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token create-token --decimals <N>", "network": state.current_network}))
-        }
-        "mint_tokens" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token mint <TOKEN_MINT> <AMOUNT> <RECIPIENT>", "network": state.current_network}))
-        }
-        "burn_tokens" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token burn <TOKEN_ACCOUNT> <AMOUNT>", "network": state.current_network}))
-        }
-        "freeze_account" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token freeze <TOKEN_ACCOUNT>", "network": state.current_network}))
-        }
-        "thaw_account" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token thaw <TOKEN_ACCOUNT>", "network": state.current_network}))
-        }
+        "create_spl_token" => Ok(
+            json!({"info": "Use Solana CLI: spl-token create-token --decimals <N>", "network": state.current_network}),
+        ),
+        "mint_tokens" => Ok(
+            json!({"info": "Use Solana CLI: spl-token mint <TOKEN_MINT> <AMOUNT> <RECIPIENT>", "network": state.current_network}),
+        ),
+        "burn_tokens" => Ok(
+            json!({"info": "Use Solana CLI: spl-token burn <TOKEN_ACCOUNT> <AMOUNT>", "network": state.current_network}),
+        ),
+        "freeze_account" => Ok(
+            json!({"info": "Use Solana CLI: spl-token freeze <TOKEN_ACCOUNT>", "network": state.current_network}),
+        ),
+        "thaw_account" => Ok(
+            json!({"info": "Use Solana CLI: spl-token thaw <TOKEN_ACCOUNT>", "network": state.current_network}),
+        ),
         "set_token_authority" => {
             let auth_type = args["authorityType"].as_str().unwrap_or("MintTokens");
-            Ok(json!({"info": format!("Use Solana CLI: spl-token authorize <TOKEN_MINT> {} <NEW_AUTHORITY>", auth_type), "network": state.current_network}))
+            Ok(
+                json!({"info": format!("Use Solana CLI: spl-token authorize <TOKEN_MINT> {} <NEW_AUTHORITY>", auth_type), "network": state.current_network}),
+            )
         }
         "get_token_supply" => {
             let mint = args["tokenMint"].as_str().ok_or("tokenMint required")?;
@@ -654,16 +716,16 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
                 "decimals": val["decimals"]
             }))
         }
-        "close_token_account" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token close <TOKEN_ACCOUNT>", "network": state.current_network}))
-        }
-        "approve_delegate" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token approve <TOKEN_ACCOUNT> <AMOUNT> <DELEGATE>", "network": state.current_network}))
-        }
-        "revoke_delegate" => {
-            Ok(json!({"info": "Use Solana CLI: spl-token revoke <TOKEN_ACCOUNT>", "network": state.current_network}))
-        }
-        _ => Err(format!("Unknown tool: {name}"))
+        "close_token_account" => Ok(
+            json!({"info": "Use Solana CLI: spl-token close <TOKEN_ACCOUNT>", "network": state.current_network}),
+        ),
+        "approve_delegate" => Ok(
+            json!({"info": "Use Solana CLI: spl-token approve <TOKEN_ACCOUNT> <AMOUNT> <DELEGATE>", "network": state.current_network}),
+        ),
+        "revoke_delegate" => Ok(
+            json!({"info": "Use Solana CLI: spl-token revoke <TOKEN_ACCOUNT>", "network": state.current_network}),
+        ),
+        _ => Err(format!("Unknown tool: {name}")),
     }
 }
 
@@ -693,7 +755,10 @@ fn base64_encode(data: &[u8]) -> String {
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().with_env_filter("info").with_writer(std::io::stderr).init();
+    tracing_subscriber::fmt()
+        .with_env_filter("info")
+        .with_writer(std::io::stderr)
+        .init();
     info!("solana-mcp-server starting on stdio");
 
     let mut state = AppState::new();
@@ -703,9 +768,13 @@ async fn main() {
     let mut line = String::new();
     loop {
         line.clear();
-        if stdin.lock().read_line(&mut line).unwrap_or(0) == 0 { break; }
+        if stdin.lock().read_line(&mut line).unwrap_or(0) == 0 {
+            break;
+        }
         let trimmed = line.trim();
-        if trimmed.is_empty() { continue; }
+        if trimmed.is_empty() {
+            continue;
+        }
 
         let req: JsonRpcRequest = match serde_json::from_str(trimmed) {
             Ok(r) => r,
