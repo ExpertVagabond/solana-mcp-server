@@ -136,17 +136,23 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10000): P
 }
 
 // ============================================================================
-// SECTION 7: Wallet Lookup with Validation
+// SECTION 7: Secure Wallet Store — access-audited, lookup-validated
 // ============================================================================
+const _walletAccessLog: Array<{ wallet: string; op: string; ts: number }> = [];
+function logWalletAccess(wallet: string, op: string): void {
+  _walletAccessLog.push({ wallet, op, ts: Date.now() });
+  if (_walletAccessLog.length > 1000) _walletAccessLog.splice(0, 500);
+}
 function getWalletOrThrow(walletName: string): { keypair: Keypair; name: string } {
   validateWalletName(walletName);
   const wallet = wallets.get(walletName);
   if (!wallet) throw new Error(`Wallet '${walletName}' not found`);
+  logWalletAccess(walletName, "read");
   return wallet;
 }
 
 // ============================================================================
-// SECTION 8: Network & State Management
+// SECTION 8: Network & State Management — validated endpoint, TLS-only mainnet
 // ============================================================================
 const NETWORKS: Record<string, string> = {
   mainnet: "https://api.mainnet-beta.solana.com",
@@ -154,6 +160,7 @@ const NETWORKS: Record<string, string> = {
   testnet: "https://api.testnet.solana.com",
   localhost: "http://127.0.0.1:8899",
 };
+// Wallet store: session-scoped, never persisted to disk, cleared on exit
 const wallets = new Map<string, { keypair: Keypair; name: string }>();
 let connection: Connection;
 let currentNetwork = "devnet";
@@ -161,12 +168,21 @@ let connectionInitialized = false;
 
 function initializeConnection(network: string = "devnet") {
   validateNetwork(network);
+  // Security: enforce HTTPS for non-localhost networks
+  const url = NETWORKS[network];
+  if (network !== "localhost" && !url.startsWith("https://")) {
+    throw new Error(`Network ${network} requires HTTPS endpoint`);
+  }
   currentNetwork = network;
-  connection = new Connection(NETWORKS[network], "confirmed");
+  connection = new Connection(url, "confirmed");
 }
 function ensureConnection() {
   if (!connectionInitialized) { initializeConnection(); connectionInitialized = true; }
 }
+// Security: clear sensitive material on process exit
+process.on("exit", () => { wallets.clear(); });
+process.on("SIGINT", () => { wallets.clear(); process.exit(0); });
+process.on("SIGTERM", () => { wallets.clear(); process.exit(0); });
 
 // Tool definitions
 const tools: Tool[] = [
