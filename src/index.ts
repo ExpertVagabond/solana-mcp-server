@@ -29,6 +29,49 @@ import {
 import bs58 from "bs58";
 import { z } from "zod";
 
+// --- Input validation helpers ---
+
+const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const WALLET_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const MAX_SOL_TRANSFER = 1000; // safety cap
+const MAX_TOKEN_AMOUNT = 1e15;
+
+function validateAddress(address: string, label = "address"): void {
+  if (!address || typeof address !== "string") {
+    throw new Error(`${label} is required`);
+  }
+  if (!SOLANA_ADDRESS_RE.test(address)) {
+    throw new Error(`Invalid ${label}: must be a valid base58-encoded Solana address`);
+  }
+}
+
+function validateWalletName(name: string): void {
+  if (!name || typeof name !== "string") {
+    throw new Error("Wallet name is required");
+  }
+  if (!WALLET_NAME_RE.test(name)) {
+    throw new Error("Wallet name must be 1-64 alphanumeric characters, hyphens, or underscores");
+  }
+}
+
+function validateAmount(amount: number, label = "amount", max = MAX_SOL_TRANSFER): void {
+  if (typeof amount !== "number" || !Number.isFinite(amount)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+  if (amount <= 0) {
+    throw new Error(`${label} must be positive`);
+  }
+  if (amount > max) {
+    throw new Error(`${label} exceeds maximum allowed (${max})`);
+  }
+}
+
+function sanitizeError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  // Strip potential stack traces and internal paths from user-facing errors
+  return msg.split("\n")[0].slice(0, 500);
+}
+
 // Solana network configurations
 const NETWORKS = {
   mainnet: "https://api.mainnet-beta.solana.com",
@@ -526,7 +569,8 @@ const tools: Tool[] = [
 // Tool handlers
 async function handleCreateWallet(args: any) {
   const { name } = args;
-  
+  validateWalletName(name);
+
   if (wallets.has(name)) {
     throw new Error(`Wallet with name '${name}' already exists`);
   }
@@ -546,7 +590,12 @@ async function handleCreateWallet(args: any) {
 
 async function handleImportWallet(args: any) {
   const { name, privateKey } = args;
-  
+  validateWalletName(name);
+
+  if (!privateKey || typeof privateKey !== "string" || privateKey.length < 32 || privateKey.length > 128) {
+    throw new Error("Invalid private key format");
+  }
+
   if (wallets.has(name)) {
     throw new Error(`Wallet with name '${name}' already exists`);
   }
@@ -564,7 +613,7 @@ async function handleImportWallet(args: any) {
       }
     };
   } catch (error) {
-    throw new Error(`Invalid private key: ${error}`);
+    throw new Error("Invalid private key: could not decode or derive keypair");
   }
 }
 
@@ -604,7 +653,9 @@ async function handleGetBalance(args: any) {
 
 async function handleGetTokenBalance(args: any) {
   const { walletName, tokenMint } = args;
-  
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+
   const wallet = wallets.get(walletName);
   if (!wallet) {
     throw new Error(`Wallet '${walletName}' not found`);
@@ -635,7 +686,10 @@ async function handleGetTokenBalance(args: any) {
 
 async function handleTransferSol(args: any) {
   const { fromWallet, toAddress, amount } = args;
-  
+  validateWalletName(fromWallet);
+  validateAddress(toAddress, "toAddress");
+  validateAmount(amount, "SOL amount", MAX_SOL_TRANSFER);
+
   const wallet = wallets.get(fromWallet);
   if (!wallet) {
     throw new Error(`Wallet '${fromWallet}' not found`);
@@ -670,7 +724,11 @@ async function handleTransferSol(args: any) {
 
 async function handleTransferTokens(args: any) {
   const { fromWallet, toAddress, tokenMint, amount } = args;
-  
+  validateWalletName(fromWallet);
+  validateAddress(toAddress, "toAddress");
+  validateAddress(tokenMint, "tokenMint");
+  validateAmount(amount, "token amount", MAX_TOKEN_AMOUNT);
+
   const wallet = wallets.get(fromWallet);
   if (!wallet) {
     throw new Error(`Wallet '${fromWallet}' not found`);
@@ -725,7 +783,9 @@ async function handleTransferTokens(args: any) {
 
 async function handleAirdropSol(args: any) {
   const { walletName, amount = 1 } = args;
-  
+  validateWalletName(walletName);
+  validateAmount(amount, "airdrop amount", 5); // devnet cap
+
   if (currentNetwork === "mainnet") {
     throw new Error("Airdrop is not available on mainnet");
   }
@@ -749,7 +809,8 @@ async function handleAirdropSol(args: any) {
 
 async function handleGetAccountInfo(args: any) {
   const { address } = args;
-  
+  validateAddress(address);
+
   ensureConnection();
   const pubkey = new PublicKey(address);
   const accountInfo = await connection.getAccountInfo(pubkey);
@@ -774,7 +835,10 @@ async function handleGetAccountInfo(args: any) {
 
 async function handleGetTransaction(args: any) {
   const { signature } = args;
-  
+  if (!signature || typeof signature !== "string" || signature.length < 32 || signature.length > 128) {
+    throw new Error("Invalid transaction signature");
+  }
+
   ensureConnection();
   const transaction = await connection.getTransaction(signature, {
     commitment: "confirmed",
@@ -931,6 +995,10 @@ async function handleCreateSplToken(args: any) {
 
 async function handleMintTokens(args: any) {
   const { walletName, tokenMint, destinationAddress, amount } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAddress(destinationAddress, "destinationAddress");
+  validateAmount(amount, "mint amount", MAX_TOKEN_AMOUNT);
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -992,6 +1060,9 @@ async function handleMintTokens(args: any) {
 
 async function handleBurnTokens(args: any) {
   const { walletName, tokenMint, amount } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAmount(amount, "burn amount", MAX_TOKEN_AMOUNT);
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1374,7 +1445,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       content: [
         {
           type: "text",
-          text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          text: `Error: ${sanitizeError(error)}`,
         },
       ],
       isError: true,
