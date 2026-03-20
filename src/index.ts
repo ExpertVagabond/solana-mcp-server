@@ -32,16 +32,25 @@ import { z } from "zod";
 // --- Input validation helpers ---
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/;
 const WALLET_NAME_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const MAX_SOL_TRANSFER = 1000; // safety cap
 const MAX_TOKEN_AMOUNT = 1e15;
+const VALID_NETWORKS = new Set(["mainnet", "devnet", "testnet", "localhost"]);
+const VALID_AUTHORITY_TYPES = new Set(["MintTokens", "FreezeAccount", "AccountOwner", "CloseAccount"]);
 
 function validateAddress(address: string, label = "address"): void {
   if (!address || typeof address !== "string") {
     throw new Error(`${label} is required`);
   }
   if (!SOLANA_ADDRESS_RE.test(address)) {
-    throw new Error(`Invalid ${label}: must be a valid base58-encoded Solana address`);
+    throw new Error(`Invalid ${label}: must be a valid base58-encoded Solana address (32-44 chars)`);
+  }
+  // Verify it can actually construct a PublicKey
+  try {
+    new PublicKey(address);
+  } catch {
+    throw new Error(`Invalid ${label}: not a valid Solana public key`);
   }
 }
 
@@ -66,10 +75,63 @@ function validateAmount(amount: number, label = "amount", max = MAX_SOL_TRANSFER
   }
 }
 
+function validateNetwork(network: string): void {
+  if (!network || typeof network !== "string") {
+    throw new Error("Network is required");
+  }
+  if (!VALID_NETWORKS.has(network)) {
+    throw new Error(`Invalid network: must be one of ${[...VALID_NETWORKS].join(", ")}`);
+  }
+}
+
+function validateAuthorityType(authorityType: string): void {
+  if (!authorityType || typeof authorityType !== "string") {
+    throw new Error("Authority type is required");
+  }
+  if (!VALID_AUTHORITY_TYPES.has(authorityType)) {
+    throw new Error(`Invalid authority type: must be one of ${[...VALID_AUTHORITY_TYPES].join(", ")}`);
+  }
+}
+
+function validateDecimals(decimals: number): void {
+  if (typeof decimals !== "number" || !Number.isInteger(decimals)) {
+    throw new Error("Decimals must be an integer");
+  }
+  if (decimals < 0 || decimals > 18) {
+    throw new Error("Decimals must be between 0 and 18");
+  }
+}
+
+function validateSignature(signature: string): void {
+  if (!signature || typeof signature !== "string") {
+    throw new Error("Transaction signature is required");
+  }
+  if (signature.length < 32 || signature.length > 128) {
+    throw new Error("Invalid transaction signature length");
+  }
+  if (!BASE58_RE.test(signature)) {
+    throw new Error("Invalid transaction signature: must be base58-encoded");
+  }
+}
+
+function validatePrivateKey(privateKey: string): void {
+  if (!privateKey || typeof privateKey !== "string") {
+    throw new Error("Private key is required");
+  }
+  if (privateKey.length < 32 || privateKey.length > 128) {
+    throw new Error("Invalid private key length");
+  }
+  if (!BASE58_RE.test(privateKey)) {
+    throw new Error("Invalid private key: must be base58-encoded");
+  }
+}
+
 function sanitizeError(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error);
-  // Strip potential stack traces and internal paths from user-facing errors
-  return msg.split("\n")[0].slice(0, 500);
+  // Strip potential stack traces, internal paths, and private key material from user-facing errors
+  const firstLine = msg.split("\n")[0].slice(0, 500);
+  // Redact anything that looks like a private key (long base58 strings > 60 chars)
+  return firstLine.replace(/[1-9A-HJ-NP-Za-km-z]{60,}/g, "[REDACTED]");
 }
 
 // Solana network configurations
@@ -583,18 +645,15 @@ async function handleCreateWallet(args: any) {
     wallet: {
       name,
       address: keypair.publicKey.toString(),
-      privateKey: bs58.encode(keypair.secretKey)
-    }
+    },
+    warning: "Private key is stored in memory for this session only. Use export_wallet if you need to back it up. Never share private keys."
   };
 }
 
 async function handleImportWallet(args: any) {
   const { name, privateKey } = args;
   validateWalletName(name);
-
-  if (!privateKey || typeof privateKey !== "string" || privateKey.length < 32 || privateKey.length > 128) {
-    throw new Error("Invalid private key format");
-  }
+  validatePrivateKey(privateKey);
 
   if (wallets.has(name)) {
     throw new Error(`Wallet with name '${name}' already exists`);
@@ -602,6 +661,9 @@ async function handleImportWallet(args: any) {
 
   try {
     const secretKey = bs58.decode(privateKey);
+    if (secretKey.length !== 64) {
+      throw new Error("Invalid secret key length");
+    }
     const keypair = Keypair.fromSecretKey(secretKey);
     wallets.set(name, { keypair, name });
 
@@ -613,6 +675,7 @@ async function handleImportWallet(args: any) {
       }
     };
   } catch (error) {
+    // Never echo back the private key in error messages
     throw new Error("Invalid private key: could not decode or derive keypair");
   }
 }
@@ -631,7 +694,8 @@ async function handleListWallets() {
 
 async function handleGetBalance(args: any) {
   const { walletName } = args;
-  
+  validateWalletName(walletName);
+
   const wallet = wallets.get(walletName);
   if (!wallet) {
     throw new Error(`Wallet '${walletName}' not found`);
@@ -835,9 +899,7 @@ async function handleGetAccountInfo(args: any) {
 
 async function handleGetTransaction(args: any) {
   const { signature } = args;
-  if (!signature || typeof signature !== "string" || signature.length < 32 || signature.length > 128) {
-    throw new Error("Invalid transaction signature");
-  }
+  validateSignature(signature);
 
   ensureConnection();
   const transaction = await connection.getTransaction(signature, {
@@ -871,9 +933,10 @@ async function handleGetRecentBlockhash() {
 
 async function handleSwitchNetwork(args: any) {
   const { network } = args;
-  
+  validateNetwork(network);
+
   initializeConnection(network);
-  
+
   return {
     success: true,
     network: currentNetwork,
@@ -898,7 +961,9 @@ async function handleGetNetworkInfo() {
 
 async function handleCreateTokenAccount(args: any) {
   const { walletName, tokenMint } = args;
-  
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+
   const wallet = wallets.get(walletName);
   if (!wallet) {
     throw new Error(`Wallet '${walletName}' not found`);
@@ -935,24 +1000,25 @@ async function handleCreateTokenAccount(args: any) {
 
 async function handleGetTokenAccounts(args: any) {
   const { walletName } = args;
-  
+  validateWalletName(walletName);
+
   const wallet = wallets.get(walletName);
   if (!wallet) {
     throw new Error(`Wallet '${walletName}' not found`);
   }
 
   ensureConnection();
-  const tokenAccounts = await connection.getTokenAccountsByOwner(wallet.keypair.publicKey, {
+  const tokenAccounts = await connection.getParsedTokenAccountsByOwner(wallet.keypair.publicKey, {
     programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
   });
 
   const accounts = tokenAccounts.value.map(account => {
-    const data = account.account.data as any;
+    const parsed = account.account.data;
     return {
       address: account.pubkey.toString(),
-      mint: data.parsed?.info?.mint || 'unknown',
-      amount: data.parsed?.info?.tokenAmount?.uiAmount || 0,
-      decimals: data.parsed?.info?.tokenAmount?.decimals || 0
+      mint: parsed.parsed?.info?.mint || "unknown",
+      amount: parsed.parsed?.info?.tokenAmount?.uiAmount ?? 0,
+      decimals: parsed.parsed?.info?.tokenAmount?.decimals ?? 0
     };
   });
 
@@ -965,6 +1031,12 @@ async function handleGetTokenAccounts(args: any) {
 
 async function handleCreateSplToken(args: any) {
   const { walletName, decimals = 9, freezeAuthority = false } = args;
+  validateWalletName(walletName);
+  validateDecimals(decimals);
+
+  if (typeof freezeAuthority !== "boolean") {
+    throw new Error("freezeAuthority must be a boolean");
+  }
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1100,6 +1172,9 @@ async function handleBurnTokens(args: any) {
 
 async function handleFreezeAccount(args: any) {
   const { walletName, tokenMint, accountAddress } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAddress(accountAddress, "accountAddress");
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1128,6 +1203,9 @@ async function handleFreezeAccount(args: any) {
 
 async function handleThawAccount(args: any) {
   const { walletName, tokenMint, accountAddress } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAddress(accountAddress, "accountAddress");
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1156,6 +1234,12 @@ async function handleThawAccount(args: any) {
 
 async function handleSetTokenAuthority(args: any) {
   const { walletName, tokenMint, authorityType, newAuthority } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAuthorityType(authorityType);
+  if (newAuthority !== undefined && newAuthority !== null) {
+    validateAddress(newAuthority, "newAuthority");
+  }
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1166,19 +1250,21 @@ async function handleSetTokenAuthority(args: any) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const newAuthorityPubkey = newAuthority ? new PublicKey(newAuthority) : null;
 
-  const authorityTypeMap: { [key: string]: AuthorityType } = {
+  const authorityTypeMap: Record<string, AuthorityType> = {
     "MintTokens": AuthorityType.MintTokens,
     "FreezeAccount": AuthorityType.FreezeAccount,
     "AccountOwner": AuthorityType.AccountOwner,
     "CloseAccount": AuthorityType.CloseAccount
   };
 
+  const resolvedAuthType = authorityTypeMap[authorityType];
+
   const signature = await setAuthority(
     connection,
     wallet.keypair,
     tokenMintPubkey,
     wallet.keypair,
-    authorityTypeMap[authorityType],
+    resolvedAuthType,
     newAuthorityPubkey
   );
 
@@ -1193,6 +1279,7 @@ async function handleSetTokenAuthority(args: any) {
 
 async function handleGetTokenSupply(args: any) {
   const { tokenMint } = args;
+  validateAddress(tokenMint, "tokenMint");
 
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
@@ -1213,6 +1300,9 @@ async function handleGetTokenSupply(args: any) {
 
 async function handleCloseTokenAccount(args: any) {
   const { walletName, tokenMint, destinationAddress } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAddress(destinationAddress, "destinationAddress");
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1247,6 +1337,10 @@ async function handleCloseTokenAccount(args: any) {
 
 async function handleApproveDelegate(args: any) {
   const { walletName, tokenMint, delegateAddress, amount } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
+  validateAddress(delegateAddress, "delegateAddress");
+  validateAmount(amount, "delegate amount", MAX_TOKEN_AMOUNT);
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1285,6 +1379,8 @@ async function handleApproveDelegate(args: any) {
 
 async function handleRevokeDelegate(args: any) {
   const { walletName, tokenMint } = args;
+  validateWalletName(walletName);
+  validateAddress(tokenMint, "tokenMint");
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1428,8 +1524,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "revoke_delegate":
         result = await handleRevokeDelegate(args);
         break;
-      default:
-        throw new Error(`Unknown tool: ${name}`);
+      default: {
+        const safeName = typeof name === "string" ? name.slice(0, 64).replace(/[^a-zA-Z0-9_-]/g, "") : "unknown";
+        throw new Error(`Unknown tool: ${safeName}`);
+      }
     }
 
     return {
