@@ -39,6 +39,29 @@ const MAX_TOKEN_AMOUNT = 1e15;
 const VALID_NETWORKS = new Set(["mainnet", "devnet", "testnet", "localhost"]);
 const VALID_AUTHORITY_TYPES = new Set(["MintTokens", "FreezeAccount", "AccountOwner", "CloseAccount"]);
 
+// --- Zod schemas for all handler inputs ---
+// These provide runtime type-checking at the boundary before any field-level validators run
+
+const CreateWalletSchema = z.object({ name: z.string() }).strict();
+const ImportWalletSchema = z.object({ name: z.string(), privateKey: z.string() }).strict();
+const WalletNameSchema = z.object({ walletName: z.string() }).strict();
+const WalletTokenSchema = z.object({ walletName: z.string(), tokenMint: z.string() }).strict();
+const TransferSolSchema = z.object({ fromWallet: z.string(), toAddress: z.string(), amount: z.number() }).strict();
+const TransferTokensSchema = z.object({ fromWallet: z.string(), toAddress: z.string(), tokenMint: z.string(), amount: z.number() }).strict();
+const AirdropSolSchema = z.object({ walletName: z.string(), amount: z.number().optional() }).strict();
+const AddressSchema = z.object({ address: z.string() }).strict();
+const SignatureSchema = z.object({ signature: z.string() }).strict();
+const SwitchNetworkSchema = z.object({ network: z.string() }).strict();
+const CreateSplTokenSchema = z.object({ walletName: z.string(), decimals: z.number().optional(), freezeAuthority: z.boolean().optional() }).strict();
+const MintTokensSchema = z.object({ walletName: z.string(), tokenMint: z.string(), destinationAddress: z.string(), amount: z.number() }).strict();
+const BurnTokensSchema = z.object({ walletName: z.string(), tokenMint: z.string(), amount: z.number() }).strict();
+const FreezeThawSchema = z.object({ walletName: z.string(), tokenMint: z.string(), accountAddress: z.string() }).strict();
+const SetAuthoritySchema = z.object({ walletName: z.string(), tokenMint: z.string(), authorityType: z.string(), newAuthority: z.string().optional() }).strict();
+const TokenMintSchema = z.object({ tokenMint: z.string() }).strict();
+const CloseTokenAccountSchema = z.object({ walletName: z.string(), tokenMint: z.string(), destinationAddress: z.string() }).strict();
+const ApproveDelegateSchema = z.object({ walletName: z.string(), tokenMint: z.string(), delegateAddress: z.string(), amount: z.number() }).strict();
+const RevokeDelegateSchema = z.object({ walletName: z.string(), tokenMint: z.string() }).strict();
+
 function validateAddress(address: string, label = "address"): void {
   if (!address || typeof address !== "string") {
     throw new Error(`${label} is required`);
@@ -150,8 +173,11 @@ let connection: Connection;
 let currentNetwork = "devnet";
 
 function initializeConnection(network: string = "devnet") {
+  if (!VALID_NETWORKS.has(network)) {
+    throw new Error(`Invalid network '${network}': must be one of ${[...VALID_NETWORKS].join(", ")}`);
+  }
   currentNetwork = network;
-  const rpcUrl = NETWORKS[network as keyof typeof NETWORKS] || NETWORKS.devnet;
+  const rpcUrl = NETWORKS[network as keyof typeof NETWORKS];
   connection = new Connection(rpcUrl, "confirmed");
 }
 
@@ -629,8 +655,9 @@ const tools: Tool[] = [
 ];
 
 // Tool handlers
-async function handleCreateWallet(args: any) {
-  const { name } = args;
+async function handleCreateWallet(args: Record<string, unknown>) {
+  const parsed = CreateWalletSchema.parse(args);
+  const { name } = parsed;
   validateWalletName(name);
 
   if (wallets.has(name)) {
@@ -650,8 +677,9 @@ async function handleCreateWallet(args: any) {
   };
 }
 
-async function handleImportWallet(args: any) {
-  const { name, privateKey } = args;
+async function handleImportWallet(args: Record<string, unknown>) {
+  const parsed = ImportWalletSchema.parse(args);
+  const { name, privateKey } = parsed;
   validateWalletName(name);
   validatePrivateKey(privateKey);
 
@@ -692,8 +720,9 @@ async function handleListWallets() {
   };
 }
 
-async function handleGetBalance(args: any) {
-  const { walletName } = args;
+async function handleGetBalance(args: Record<string, unknown>) {
+  const parsed = WalletNameSchema.parse(args);
+  const { walletName } = parsed;
   validateWalletName(walletName);
 
   const wallet = wallets.get(walletName);
@@ -715,8 +744,9 @@ async function handleGetBalance(args: any) {
   };
 }
 
-async function handleGetTokenBalance(args: any) {
-  const { walletName, tokenMint } = args;
+async function handleGetTokenBalance(args: Record<string, unknown>) {
+  const parsed = WalletTokenSchema.parse(args);
+  const { walletName, tokenMint } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
 
@@ -726,30 +756,36 @@ async function handleGetTokenBalance(args: any) {
   }
 
   ensureConnection();
+  const tokenMintPubkey = new PublicKey(tokenMint);
+  const tokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
+
   try {
-    const tokenMintPubkey = new PublicKey(tokenMint);
-    const tokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
-    
-    const accountInfo = await getAccount(connection, tokenAccount);
-    
+    const accountInfo = await withTimeout(getAccount(connection, tokenAccount));
+
     return {
       wallet: walletName,
       tokenMint: tokenMint,
       balance: accountInfo.amount.toString(),
       decimals: accountInfo.mint.toString()
     };
-  } catch (error) {
-    return {
-      wallet: walletName,
-      tokenMint: tokenMint,
-      balance: "0",
-      error: "Token account not found or error retrieving balance"
-    };
+  } catch (error: unknown) {
+    // Distinguish "account not found" from network/timeout errors
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("could not find account") || msg.includes("TokenAccountNotFoundError")) {
+      return {
+        wallet: walletName,
+        tokenMint: tokenMint,
+        balance: "0",
+        note: "Token account does not exist for this wallet"
+      };
+    }
+    throw new Error(`Failed to retrieve token balance: ${sanitizeError(error)}`);
   }
 }
 
-async function handleTransferSol(args: any) {
-  const { fromWallet, toAddress, amount } = args;
+async function handleTransferSol(args: Record<string, unknown>) {
+  const parsed = TransferSolSchema.parse(args);
+  const { fromWallet, toAddress, amount } = parsed;
   validateWalletName(fromWallet);
   validateAddress(toAddress, "toAddress");
   validateAmount(amount, "SOL amount", MAX_SOL_TRANSFER);
@@ -771,13 +807,13 @@ async function handleTransferSol(args: any) {
     })
   );
 
-  const { blockhash } = await connection.getLatestBlockhash();
+  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.keypair.publicKey;
 
   transaction.sign(wallet.keypair);
 
-  const signature = await connection.sendTransaction(transaction, [wallet.keypair]);
+  const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
 
   return {
     success: true,
@@ -786,8 +822,9 @@ async function handleTransferSol(args: any) {
   };
 }
 
-async function handleTransferTokens(args: any) {
-  const { fromWallet, toAddress, tokenMint, amount } = args;
+async function handleTransferTokens(args: Record<string, unknown>) {
+  const parsed = TransferTokensSchema.parse(args);
+  const { fromWallet, toAddress, tokenMint, amount } = parsed;
   validateWalletName(fromWallet);
   validateAddress(toAddress, "toAddress");
   validateAddress(tokenMint, "tokenMint");
@@ -801,16 +838,30 @@ async function handleTransferTokens(args: any) {
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
   const toPubkey = new PublicKey(toAddress);
-  
+
   const fromTokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
   const toTokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, toPubkey);
 
   const transaction = new Transaction();
 
   // Check if recipient has token account, create if not
+  let recipientAccountExists = false;
   try {
-    await getAccount(connection, toTokenAccount);
-  } catch {
+    await withTimeout(getAccount(connection, toTokenAccount));
+    recipientAccountExists = true;
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    // Only create account if it genuinely doesn't exist; re-throw network errors
+    if (msg.includes("could not find account") || msg.includes("TokenAccountNotFoundError")) {
+      recipientAccountExists = false;
+    } else if (msg.includes("timed out")) {
+      throw new Error("Network timeout checking recipient token account");
+    } else {
+      recipientAccountExists = false; // Assume doesn't exist for other SPL errors
+    }
+  }
+
+  if (!recipientAccountExists) {
     transaction.add(
       createAssociatedTokenAccountInstruction(
         wallet.keypair.publicKey,
@@ -830,13 +881,13 @@ async function handleTransferTokens(args: any) {
     )
   );
 
-  const { blockhash } = await connection.getLatestBlockhash();
+  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.keypair.publicKey;
 
   transaction.sign(wallet.keypair);
 
-  const signature = await connection.sendTransaction(transaction, [wallet.keypair]);
+  const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
 
   return {
     success: true,
@@ -845,8 +896,10 @@ async function handleTransferTokens(args: any) {
   };
 }
 
-async function handleAirdropSol(args: any) {
-  const { walletName, amount = 1 } = args;
+async function handleAirdropSol(args: Record<string, unknown>) {
+  const parsed = AirdropSolSchema.parse(args);
+  const { walletName, amount: rawAmount } = parsed;
+  const amount = rawAmount ?? 1;
   validateWalletName(walletName);
   validateAmount(amount, "airdrop amount", 5); // devnet cap
 
@@ -861,7 +914,7 @@ async function handleAirdropSol(args: any) {
 
   ensureConnection();
   const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
-  const signature = await connection.requestAirdrop(wallet.keypair.publicKey, lamports);
+  const signature = await withTimeout(connection.requestAirdrop(wallet.keypair.publicKey, lamports), 30000);
 
   return {
     success: true,
@@ -871,13 +924,14 @@ async function handleAirdropSol(args: any) {
   };
 }
 
-async function handleGetAccountInfo(args: any) {
-  const { address } = args;
+async function handleGetAccountInfo(args: Record<string, unknown>) {
+  const parsed = AddressSchema.parse(args);
+  const { address } = parsed;
   validateAddress(address);
 
   ensureConnection();
   const pubkey = new PublicKey(address);
-  const accountInfo = await connection.getAccountInfo(pubkey);
+  const accountInfo = await withTimeout(connection.getAccountInfo(pubkey));
 
   if (!accountInfo) {
     return {
@@ -897,15 +951,16 @@ async function handleGetAccountInfo(args: any) {
   };
 }
 
-async function handleGetTransaction(args: any) {
-  const { signature } = args;
+async function handleGetTransaction(args: Record<string, unknown>) {
+  const parsed = SignatureSchema.parse(args);
+  const { signature } = parsed;
   validateSignature(signature);
 
   ensureConnection();
-  const transaction = await connection.getTransaction(signature, {
+  const transaction = await withTimeout(connection.getTransaction(signature, {
     commitment: "confirmed",
     maxSupportedTransactionVersion: 0
-  });
+  }));
 
   if (!transaction) {
     throw new Error("Transaction not found");
@@ -923,7 +978,7 @@ async function handleGetTransaction(args: any) {
 
 async function handleGetRecentBlockhash() {
   ensureConnection();
-  const { blockhash } = await connection.getLatestBlockhash();
+  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
   
   return {
     blockhash,
@@ -931,8 +986,9 @@ async function handleGetRecentBlockhash() {
   };
 }
 
-async function handleSwitchNetwork(args: any) {
-  const { network } = args;
+async function handleSwitchNetwork(args: Record<string, unknown>) {
+  const parsed = SwitchNetworkSchema.parse(args);
+  const { network } = parsed;
   validateNetwork(network);
 
   initializeConnection(network);
@@ -946,8 +1002,8 @@ async function handleSwitchNetwork(args: any) {
 
 async function handleGetNetworkInfo() {
   ensureConnection();
-  const version = await connection.getVersion();
-  const epochInfo = await connection.getEpochInfo();
+  const version = await withTimeout(connection.getVersion());
+  const epochInfo = await withTimeout(connection.getEpochInfo());
   
   return {
     network: currentNetwork,
@@ -959,8 +1015,9 @@ async function handleGetNetworkInfo() {
   };
 }
 
-async function handleCreateTokenAccount(args: any) {
-  const { walletName, tokenMint } = args;
+async function handleCreateTokenAccount(args: Record<string, unknown>) {
+  const parsed = WalletTokenSchema.parse(args);
+  const { walletName, tokenMint } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
 
@@ -982,13 +1039,13 @@ async function handleCreateTokenAccount(args: any) {
     )
   );
 
-  const { blockhash } = await connection.getLatestBlockhash();
+  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.keypair.publicKey;
 
   transaction.sign(wallet.keypair);
 
-  const signature = await connection.sendTransaction(transaction, [wallet.keypair]);
+  const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
 
   return {
     success: true,
@@ -998,8 +1055,9 @@ async function handleCreateTokenAccount(args: any) {
   };
 }
 
-async function handleGetTokenAccounts(args: any) {
-  const { walletName } = args;
+async function handleGetTokenAccounts(args: Record<string, unknown>) {
+  const parsed = WalletNameSchema.parse(args);
+  const { walletName } = parsed;
   validateWalletName(walletName);
 
   const wallet = wallets.get(walletName);
@@ -1008,9 +1066,9 @@ async function handleGetTokenAccounts(args: any) {
   }
 
   ensureConnection();
-  const tokenAccounts = await connection.getParsedTokenAccountsByOwner(wallet.keypair.publicKey, {
+  const tokenAccounts = await withTimeout(connection.getParsedTokenAccountsByOwner(wallet.keypair.publicKey, {
     programId: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
-  });
+  }));
 
   const accounts = tokenAccounts.value.map(account => {
     const parsed = account.account.data;
@@ -1029,14 +1087,13 @@ async function handleGetTokenAccounts(args: any) {
   };
 }
 
-async function handleCreateSplToken(args: any) {
-  const { walletName, decimals = 9, freezeAuthority = false } = args;
+async function handleCreateSplToken(args: Record<string, unknown>) {
+  const parsed = CreateSplTokenSchema.parse(args);
+  const { walletName, decimals: rawDecimals, freezeAuthority: rawFreezeAuth } = parsed;
+  const decimals = rawDecimals ?? 9;
+  const freezeAuthority = rawFreezeAuth ?? false;
   validateWalletName(walletName);
   validateDecimals(decimals);
-
-  if (typeof freezeAuthority !== "boolean") {
-    throw new Error("freezeAuthority must be a boolean");
-  }
 
   const wallet = wallets.get(walletName);
   if (!wallet) {
@@ -1047,13 +1104,13 @@ async function handleCreateSplToken(args: any) {
 
   const freezeAuthorityPubkey = freezeAuthority ? wallet.keypair.publicKey : null;
 
-  const mint = await createMint(
+  const mint = await withTimeout(createMint(
     connection,
     wallet.keypair,
     wallet.keypair.publicKey,
     freezeAuthorityPubkey,
     decimals
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1065,8 +1122,9 @@ async function handleCreateSplToken(args: any) {
   };
 }
 
-async function handleMintTokens(args: any) {
-  const { walletName, tokenMint, destinationAddress, amount } = args;
+async function handleMintTokens(args: Record<string, unknown>) {
+  const parsed = MintTokensSchema.parse(args);
+  const { walletName, tokenMint, destinationAddress, amount } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAddress(destinationAddress, "destinationAddress");
@@ -1081,7 +1139,7 @@ async function handleMintTokens(args: any) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const destinationPubkey = new PublicKey(destinationAddress);
 
-  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
   const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
 
   const destinationTokenAccount = await getAssociatedTokenAddress(
@@ -1090,9 +1148,22 @@ async function handleMintTokens(args: any) {
   );
 
   // Check if destination token account exists, create if not
+  let destAccountExists = false;
   try {
-    await getAccount(connection, destinationTokenAccount);
-  } catch {
+    await withTimeout(getAccount(connection, destinationTokenAccount));
+    destAccountExists = true;
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("could not find account") || msg.includes("TokenAccountNotFoundError")) {
+      destAccountExists = false;
+    } else if (msg.includes("timed out")) {
+      throw new Error("Network timeout checking destination token account");
+    } else {
+      destAccountExists = false;
+    }
+  }
+
+  if (!destAccountExists) {
     const transaction = new Transaction().add(
       createAssociatedTokenAccountInstruction(
         wallet.keypair.publicKey,
@@ -1102,23 +1173,23 @@ async function handleMintTokens(args: any) {
       )
     );
 
-    const { blockhash } = await connection.getLatestBlockhash();
+    const { blockhash } = await withTimeout(connection.getLatestBlockhash());
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = wallet.keypair.publicKey;
     transaction.sign(wallet.keypair);
 
-    await connection.sendTransaction(transaction, [wallet.keypair]);
+    await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for account creation
   }
 
-  const signature = await mintTo(
+  const signature = await withTimeout(mintTo(
     connection,
     wallet.keypair,
     tokenMintPubkey,
     destinationTokenAccount,
     wallet.keypair,
     rawAmount
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1130,8 +1201,9 @@ async function handleMintTokens(args: any) {
   };
 }
 
-async function handleBurnTokens(args: any) {
-  const { walletName, tokenMint, amount } = args;
+async function handleBurnTokens(args: Record<string, unknown>) {
+  const parsed = BurnTokensSchema.parse(args);
+  const { walletName, tokenMint, amount } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAmount(amount, "burn amount", MAX_TOKEN_AMOUNT);
@@ -1144,7 +1216,7 @@ async function handleBurnTokens(args: any) {
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
 
-  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
   const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
 
   const tokenAccount = await getAssociatedTokenAddress(
@@ -1152,14 +1224,14 @@ async function handleBurnTokens(args: any) {
     wallet.keypair.publicKey
   );
 
-  const signature = await burn(
+  const signature = await withTimeout(burn(
     connection,
     wallet.keypair,
     tokenAccount,
     tokenMintPubkey,
     wallet.keypair,
     rawAmount
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1170,8 +1242,9 @@ async function handleBurnTokens(args: any) {
   };
 }
 
-async function handleFreezeAccount(args: any) {
-  const { walletName, tokenMint, accountAddress } = args;
+async function handleFreezeAccount(args: Record<string, unknown>) {
+  const parsed = FreezeThawSchema.parse(args);
+  const { walletName, tokenMint, accountAddress } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAddress(accountAddress, "accountAddress");
@@ -1185,13 +1258,13 @@ async function handleFreezeAccount(args: any) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const accountPubkey = new PublicKey(accountAddress);
 
-  const signature = await freezeAccount(
+  const signature = await withTimeout(freezeAccount(
     connection,
     wallet.keypair,
     accountPubkey,
     tokenMintPubkey,
     wallet.keypair
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1201,8 +1274,9 @@ async function handleFreezeAccount(args: any) {
   };
 }
 
-async function handleThawAccount(args: any) {
-  const { walletName, tokenMint, accountAddress } = args;
+async function handleThawAccount(args: Record<string, unknown>) {
+  const parsed = FreezeThawSchema.parse(args);
+  const { walletName, tokenMint, accountAddress } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAddress(accountAddress, "accountAddress");
@@ -1216,13 +1290,13 @@ async function handleThawAccount(args: any) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const accountPubkey = new PublicKey(accountAddress);
 
-  const signature = await thawAccount(
+  const signature = await withTimeout(thawAccount(
     connection,
     wallet.keypair,
     accountPubkey,
     tokenMintPubkey,
     wallet.keypair
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1232,8 +1306,9 @@ async function handleThawAccount(args: any) {
   };
 }
 
-async function handleSetTokenAuthority(args: any) {
-  const { walletName, tokenMint, authorityType, newAuthority } = args;
+async function handleSetTokenAuthority(args: Record<string, unknown>) {
+  const parsed = SetAuthoritySchema.parse(args);
+  const { walletName, tokenMint, authorityType, newAuthority } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAuthorityType(authorityType);
@@ -1259,14 +1334,14 @@ async function handleSetTokenAuthority(args: any) {
 
   const resolvedAuthType = authorityTypeMap[authorityType];
 
-  const signature = await setAuthority(
+  const signature = await withTimeout(setAuthority(
     connection,
     wallet.keypair,
     tokenMintPubkey,
     wallet.keypair,
     resolvedAuthType,
     newAuthorityPubkey
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1277,14 +1352,15 @@ async function handleSetTokenAuthority(args: any) {
   };
 }
 
-async function handleGetTokenSupply(args: any) {
-  const { tokenMint } = args;
+async function handleGetTokenSupply(args: Record<string, unknown>) {
+  const parsed = TokenMintSchema.parse(args);
+  const { tokenMint } = parsed;
   validateAddress(tokenMint, "tokenMint");
 
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
 
-  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
   const supply = Number(mintInfo.supply) / Math.pow(10, mintInfo.decimals);
 
   return {
@@ -1298,8 +1374,9 @@ async function handleGetTokenSupply(args: any) {
   };
 }
 
-async function handleCloseTokenAccount(args: any) {
-  const { walletName, tokenMint, destinationAddress } = args;
+async function handleCloseTokenAccount(args: Record<string, unknown>) {
+  const parsed = CloseTokenAccountSchema.parse(args);
+  const { walletName, tokenMint, destinationAddress } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAddress(destinationAddress, "destinationAddress");
@@ -1318,13 +1395,13 @@ async function handleCloseTokenAccount(args: any) {
     wallet.keypair.publicKey
   );
 
-  const signature = await closeAccount(
+  const signature = await withTimeout(closeAccount(
     connection,
     wallet.keypair,
     tokenAccount,
     destinationPubkey,
     wallet.keypair
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1335,8 +1412,9 @@ async function handleCloseTokenAccount(args: any) {
   };
 }
 
-async function handleApproveDelegate(args: any) {
-  const { walletName, tokenMint, delegateAddress, amount } = args;
+async function handleApproveDelegate(args: Record<string, unknown>) {
+  const parsed = ApproveDelegateSchema.parse(args);
+  const { walletName, tokenMint, delegateAddress, amount } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
   validateAddress(delegateAddress, "delegateAddress");
@@ -1351,7 +1429,7 @@ async function handleApproveDelegate(args: any) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const delegatePubkey = new PublicKey(delegateAddress);
 
-  const mintInfo = await getMint(connection, tokenMintPubkey);
+  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
   const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
 
   const tokenAccount = await getAssociatedTokenAddress(
@@ -1359,14 +1437,14 @@ async function handleApproveDelegate(args: any) {
     wallet.keypair.publicKey
   );
 
-  const signature = await approve(
+  const signature = await withTimeout(approve(
     connection,
     wallet.keypair,
     tokenAccount,
     delegatePubkey,
     wallet.keypair,
     rawAmount
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1377,8 +1455,9 @@ async function handleApproveDelegate(args: any) {
   };
 }
 
-async function handleRevokeDelegate(args: any) {
-  const { walletName, tokenMint } = args;
+async function handleRevokeDelegate(args: Record<string, unknown>) {
+  const parsed = RevokeDelegateSchema.parse(args);
+  const { walletName, tokenMint } = parsed;
   validateWalletName(walletName);
   validateAddress(tokenMint, "tokenMint");
 
@@ -1395,12 +1474,12 @@ async function handleRevokeDelegate(args: any) {
     wallet.keypair.publicKey
   );
 
-  const signature = await revoke(
+  const signature = await withTimeout(revoke(
     connection,
     wallet.keypair,
     tokenAccount,
     wallet.keypair
-  );
+  ), 30000);
 
   return {
     success: true,
@@ -1443,11 +1522,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 // Call tool handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  const { name, arguments: rawArgs } = request.params;
+  const args: Record<string, unknown> = rawArgs ?? {};
 
   try {
     let result;
-    
+
     switch (name) {
       case "create_wallet":
         result = await handleCreateWallet(args);
@@ -1552,7 +1632,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 // Export for Smithery
-export default function createServer({ config }: { config?: any }): Server {
+export default function createServer({ config }: { config?: Record<string, unknown> }): Server {
+  // Config is accepted but not used — server uses environment-based defaults
+  // Validate config shape if provided to prevent prototype pollution
+  if (config !== undefined && config !== null && typeof config !== "object") {
+    throw new Error("Invalid config: must be an object or undefined");
+  }
   return server;
 }
 
@@ -1569,9 +1654,11 @@ async function main() {
 }
 
 // Only run standalone if this is the main module (ES modules check)
-if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWith('index.js')) {
+const entryScript = typeof process !== "undefined" ? process.argv[1] ?? "" : "";
+const isMainModule = entryScript.endsWith("/index.js") || entryScript === "index.js";
+if (isMainModule) {
   main().catch((error) => {
-    console.error("Server error:", error);
+    console.error("Server error:", sanitizeError(error));
     process.exit(1);
   });
 }
