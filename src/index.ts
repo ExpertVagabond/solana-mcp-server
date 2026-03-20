@@ -62,6 +62,14 @@ const CloseTokenAccountSchema = z.object({ walletName: z.string(), tokenMint: z.
 const ApproveDelegateSchema = z.object({ walletName: z.string(), tokenMint: z.string(), delegateAddress: z.string(), amount: z.number() }).strict();
 const RevokeDelegateSchema = z.object({ walletName: z.string(), tokenMint: z.string() }).strict();
 
+function sanitizeError(error: unknown): string {
+  const msg = error instanceof Error ? error.message : String(error);
+  // Strip potential stack traces, internal paths, and private key material from user-facing errors
+  const firstLine = msg.split("\n")[0].slice(0, 500);
+  // Redact anything that looks like a private key (long base58 strings > 60 chars)
+  return firstLine.replace(/[1-9A-HJ-NP-Za-km-z]{60,}/g, "[REDACTED]");
+}
+
 function validateAddress(address: string, label = "address"): void {
   if (!address || typeof address !== "string") {
     throw new Error(`${label} is required`);
@@ -147,14 +155,6 @@ function validatePrivateKey(privateKey: string): void {
   if (!BASE58_RE.test(privateKey)) {
     throw new Error("Invalid private key: must be base58-encoded");
   }
-}
-
-function sanitizeError(error: unknown): string {
-  const msg = error instanceof Error ? error.message : String(error);
-  // Strip potential stack traces, internal paths, and private key material from user-facing errors
-  const firstLine = msg.split("\n")[0].slice(0, 500);
-  // Redact anything that looks like a private key (long base58 strings > 60 chars)
-  return firstLine.replace(/[1-9A-HJ-NP-Za-km-z]{60,}/g, "[REDACTED]");
 }
 
 // Solana network configurations
