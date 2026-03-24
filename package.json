@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.0",
+    "@psm/mcp-core-ts": "file:../psm-mcp-core-ts",
     "@solana/web3.js": "^1.95.2",
     "@solana/spl-token": "^0.4.8",
     "@coral-xyz/anchor": "^0.32.1",

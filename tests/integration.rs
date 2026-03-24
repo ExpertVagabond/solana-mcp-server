@@ -3,11 +3,9 @@
 /// Since main.rs uses private functions, these tests verify the same logic
 /// inline without importing from the binary crate. This ensures the contracts
 /// are correct and serves as a regression harness.
-
 // ---------------------------------------------------------------------------
 // rpc_url mapping
 // ---------------------------------------------------------------------------
-
 static NETWORKS: &[(&str, &str)] = &[
     ("mainnet", "https://api.mainnet-beta.solana.com"),
     ("devnet", "https://api.devnet.solana.com"),
