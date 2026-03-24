@@ -14,7 +14,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::BufRead;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
+use psm_mcp_core::error::sanitize_error;
+use psm_mcp_core::input::{validate_no_injection, validate_name};
+use psm_mcp_core::filter::OutputFilter;
 
 const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
 
@@ -23,6 +26,7 @@ const MAX_WALLET_NAME_LEN: usize = 64;
 /// Maximum number of wallets per session
 const MAX_WALLETS: usize = 256;
 /// Maximum JSON-RPC request size (bytes)
+#[allow(dead_code)]
 const MAX_REQUEST_SIZE: usize = 65_536;
 /// RPC HTTP timeout
 const RPC_TIMEOUT_SECS: u64 = 30;
@@ -34,28 +38,19 @@ static NETWORKS: &[(&str, &str)] = &[
     ("localhost", "http://127.0.0.1:8899"),
 ];
 
-/// Validate a wallet name — alphanumeric, hyphens, underscores only.
+/// Validate a wallet name — delegates to psm-mcp-core for injection checks,
+/// then applies local alphanumeric+hyphen+underscore constraint.
 fn validate_wallet_name(name: &str) -> Result<(), String> {
-    if name.is_empty() {
-        return Err("Wallet name cannot be empty".into());
-    }
-    if name.len() > MAX_WALLET_NAME_LEN {
-        return Err(format!(
-            "Wallet name exceeds max length of {} bytes",
-            MAX_WALLET_NAME_LEN
-        ));
-    }
-    if !name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    {
-        return Err("Wallet name must contain only alphanumeric chars, hyphens, or underscores".into());
-    }
-    Ok(())
+    // psm-mcp-core: reject shell metacharacters, path traversal, null bytes, newlines
+    validate_name(name, "wallet name", MAX_WALLET_NAME_LEN)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Validate a Solana base58 address (32-44 chars, base58 alphabet).
+/// Also rejects injection characters via psm-mcp-core.
 fn validate_solana_address(addr: &str) -> Result<(), String> {
+    validate_no_injection(addr, "solana address").map_err(|e| e.to_string())?;
     if addr.len() < 32 || addr.len() > 44 {
         return Err(format!("Invalid address length: {} (expected 32-44)", addr.len()));
     }
@@ -69,7 +64,9 @@ fn validate_solana_address(addr: &str) -> Result<(), String> {
 }
 
 /// Validate a base58 private key (64-byte keypair encoded).
+/// Also rejects injection characters via psm-mcp-core.
 fn validate_base58_private_key(key: &str) -> Result<(), String> {
+    validate_no_injection(key, "private key").map_err(|e| e.to_string())?;
     if key.is_empty() || key.len() > 128 {
         return Err("Private key must be 1-128 characters".into());
     }
@@ -118,6 +115,7 @@ fn rpc_url(network: &str) -> String {
 struct Wallet {
     name: String,
     secret_key: [u8; 64],
+    #[allow(dead_code)]
     public_key: [u8; 32],
     address: String,
 }
@@ -214,6 +212,7 @@ fn keypair_from_secret(secret: &[u8; 64]) -> ed25519_dalek::SigningKey {
 
 #[derive(Deserialize)]
 struct JsonRpcRequest {
+    #[allow(dead_code)]
     jsonrpc: String,
     id: Option<Value>,
     method: String,
@@ -223,6 +222,7 @@ struct JsonRpcRequest {
 
 impl JsonRpcRequest {
     /// Validate request structure before dispatch.
+    #[allow(dead_code)]
     fn validate(&self) -> Result<(), String> {
         if self.jsonrpc != "2.0" {
             return Err(format!("Invalid jsonrpc version: {}", self.jsonrpc));
@@ -532,6 +532,8 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
     match name {
         "create_wallet" => {
             let wname = args["name"].as_str().ok_or("name required")?;
+            validate_wallet_name(wname)?;
+            state.can_add_wallet()?;
             if state.wallets.contains_key(wname) {
                 return Err(format!("Wallet '{}' already exists", wname));
             }
@@ -553,6 +555,9 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         "import_wallet" => {
             let wname = args["name"].as_str().ok_or("name required")?;
             let pk_str = args["privateKey"].as_str().ok_or("privateKey required")?;
+            validate_wallet_name(wname)?;
+            validate_base58_private_key(pk_str)?;
+            state.can_add_wallet()?;
             if state.wallets.contains_key(wname) {
                 return Err(format!("Wallet '{}' already exists", wname));
             }
@@ -599,6 +604,7 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         "get_token_balance" => {
             let wname = args["walletName"].as_str().ok_or("walletName required")?;
             let token_mint = args["tokenMint"].as_str().ok_or("tokenMint required")?;
+            validate_solana_address(token_mint)?;
             let wallet = state.get_wallet(wname)?;
             let result = state
                 .rpc(
@@ -628,6 +634,7 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
             let from = args["fromWallet"].as_str().ok_or("fromWallet required")?;
             let to = args["toAddress"].as_str().ok_or("toAddress required")?;
             let amount = args["amount"].as_f64().ok_or("amount required")?;
+            validate_solana_address(to)?;
             let wallet = state.get_wallet(from)?;
             let lamports = (amount * LAMPORTS_PER_SOL as f64) as u64;
 
@@ -643,14 +650,13 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
 
             // Build a SystemProgram.Transfer transaction
             let system_program = [0u8; 32];
-            // Compact array: 1 signature placeholder
-            let mut tx_message: Vec<u8> = Vec::new();
-            // Message header: 1 signer, 0 readonly signed, 1 readonly unsigned
-            tx_message.push(1); // num_required_signatures
-            tx_message.push(0); // num_readonly_signed_accounts
-            tx_message.push(1); // num_readonly_unsigned_accounts
-            // Account keys: from, to, system_program
-            tx_message.push(3); // compact array length
+            // Message header + compact array length for 3 account keys
+            let mut tx_message: Vec<u8> = vec![
+                1, // num_required_signatures
+                0, // num_readonly_signed_accounts
+                1, // num_readonly_unsigned_accounts
+                3, // compact array length (3 account keys)
+            ];
             tx_message.extend_from_slice(&from_bytes);
             tx_message.extend_from_slice(&to_bytes);
             tx_message.extend_from_slice(&system_program);
@@ -723,6 +729,7 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         }
         "get_account_info" => {
             let address = args["address"].as_str().ok_or("address required")?;
+            validate_solana_address(address)?;
             let result = state
                 .rpc(
                     "getAccountInfo",
@@ -745,6 +752,7 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         }
         "get_transaction" => {
             let sig = args["signature"].as_str().ok_or("signature required")?;
+            validate_no_injection(sig, "transaction signature").map_err(|e| e.to_string())?;
             let result = state
                 .rpc(
                     "getTransaction",
@@ -769,6 +777,7 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         }
         "switch_network" => {
             let network = args["network"].as_str().ok_or("network required")?;
+            validate_no_injection(network, "network name").map_err(|e| e.to_string())?;
             state.current_network = network.to_string();
             Ok(json!({"success": true, "network": network, "rpcUrl": rpc_url(network)}))
         }
@@ -839,6 +848,7 @@ async fn call_tool(state: &mut AppState, name: &str, args: &Value) -> Result<Val
         }
         "get_token_supply" => {
             let mint = args["tokenMint"].as_str().ok_or("tokenMint required")?;
+            validate_solana_address(mint)?;
             let result = state.rpc("getTokenSupply", json!([mint])).await?;
             let val = &result["value"];
             Ok(json!({
@@ -893,6 +903,7 @@ async fn main() {
         .init();
     info!("solana-mcp-server starting on stdio");
 
+    let output_filter = OutputFilter::default();
     let mut state = AppState::new();
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
@@ -933,21 +944,32 @@ async fn main() {
                 let tool_name = req.params["name"].as_str().unwrap_or("");
                 let arguments = &req.params["arguments"];
                 match call_tool(&mut state, tool_name, arguments).await {
-                    Ok(result) => json!({
-                        "jsonrpc": "2.0",
-                        "id": req.id,
-                        "result": {
-                            "content": [{"type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default()}]
+                    Ok(result) => {
+                        let raw_text = serde_json::to_string_pretty(&result).unwrap_or_default();
+                        // Filter output through OutputFilter to redact secrets/PII
+                        let filtered = output_filter.filter(&raw_text);
+                        if filtered.modified {
+                            warn!("OutputFilter redacted {} items from tool response", filtered.redactions.len());
                         }
-                    }),
-                    Err(e) => json!({
-                        "jsonrpc": "2.0",
-                        "id": req.id,
-                        "result": {
-                            "content": [{"type": "text", "text": format!("Error: {e}")}],
-                            "isError": true
-                        }
-                    }),
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": req.id,
+                            "result": {
+                                "content": [{"type": "text", "text": filtered.text}]
+                            }
+                        })
+                    }
+                    Err(e) => {
+                        let sanitized = sanitize_error(&e, 300);
+                        json!({
+                            "jsonrpc": "2.0",
+                            "id": req.id,
+                            "result": {
+                                "content": [{"type": "text", "text": format!("Error: {sanitized}")}],
+                                "isError": true
+                            }
+                        })
+                    }
                 }
             }
             _ => json!({

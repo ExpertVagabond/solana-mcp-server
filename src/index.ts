@@ -20,6 +20,16 @@ import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PE
 import { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount, createMint, mintTo, burn, freezeAccount, thawAccount, setAuthority, AuthorityType, getMint, closeAccount, approve, revoke } from "@solana/spl-token";
 import bs58 from "bs58";
 import { z } from "zod";
+import {
+  validateNoInjection as psmValidateNoInjection,
+  sanitizeError as psmSanitizeError,
+  OutputFilter,
+} from "@psm/mcp-core-ts";
+
+// ============================================================================
+// SECTION 0: PSM MCP Core — output filter instance (secrets + PII redaction)
+// ============================================================================
+const outputFilter = new OutputFilter(true, true);
 
 // ============================================================================
 // SECTION 1: Security Constants & Regex Patterns
@@ -61,11 +71,15 @@ const RevokeDelegateSchema = z.object({ walletName: z.string(), tokenMint: z.str
 
 // ============================================================================
 // SECTION 3: Error Sanitization — never expose internals to callers
+// Uses psm-mcp-core-ts sanitizeError (strips paths, redacts long tokens)
+// plus local private-key regex for Solana-specific key patterns.
 // ============================================================================
 function sanitizeError(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error);
-  const firstLine = msg.split("\n")[0].slice(0, 500);
-  return firstLine.replace(PRIVATE_KEY_REDACT_RE, "[REDACTED]");
+  // First pass: PSM core sanitizer strips paths and long tokens
+  const psmSanitized = psmSanitizeError(msg, 500);
+  // Second pass: local Solana private key pattern
+  return psmSanitized.replace(PRIVATE_KEY_REDACT_RE, "[REDACTED]");
 }
 
 // ============================================================================
@@ -90,11 +104,15 @@ const rateLimiter = new RateLimiter();
 // ============================================================================
 function validateAddress(address: string, label = "address"): void {
   if (!address || typeof address !== "string") throw new Error(`${label} is required`);
+  // PSM injection check: reject shell metacharacters, path traversal, null bytes, newlines
+  psmValidateNoInjection(address, label);
   if (!SOLANA_ADDRESS_RE.test(address)) throw new Error(`Invalid ${label}: must be a valid base58-encoded Solana address (32-44 chars)`);
   try { new PublicKey(address); } catch { throw new Error(`Invalid ${label}: not a valid Solana public key`); }
 }
 function validateWalletName(name: string): void {
   if (!name || typeof name !== "string") throw new Error("Wallet name is required");
+  // PSM injection check before format validation
+  psmValidateNoInjection(name, "wallet name");
   if (!WALLET_NAME_RE.test(name)) throw new Error("Wallet name must be 1-64 alphanumeric characters, hyphens, or underscores");
 }
 function validateAmount(amount: number, label = "amount", max = MAX_SOL_TRANSFER): void {
@@ -104,6 +122,7 @@ function validateAmount(amount: number, label = "amount", max = MAX_SOL_TRANSFER
 }
 function validateNetwork(network: string): void {
   if (!network || typeof network !== "string") throw new Error("Network is required");
+  psmValidateNoInjection(network, "network");
   if (!VALID_NETWORKS.has(network)) throw new Error(`Invalid network: must be one of ${[...VALID_NETWORKS].join(", ")}`);
 }
 function validateAuthorityType(authorityType: string): void {
@@ -116,11 +135,13 @@ function validateDecimals(decimals: number): void {
 }
 function validateSignature(signature: string): void {
   if (!signature || typeof signature !== "string") throw new Error("Transaction signature is required");
+  psmValidateNoInjection(signature, "transaction signature");
   if (signature.length < 32 || signature.length > 128) throw new Error("Invalid transaction signature length");
   if (!BASE58_RE.test(signature)) throw new Error("Invalid transaction signature: must be base58-encoded");
 }
 function validatePrivateKey(privateKey: string): void {
   if (!privateKey || typeof privateKey !== "string") throw new Error("Private key is required");
+  psmValidateNoInjection(privateKey, "private key");
   if (privateKey.length < 32 || privateKey.length > 128) throw new Error("Invalid private key length");
   if (!BASE58_RE.test(privateKey)) throw new Error("Invalid private key: must be base58-encoded");
 }
@@ -1595,11 +1616,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     }
 
+    // Filter all output through PSM OutputFilter to redact secrets and PII.
+    // Solana RPC can return account data containing sensitive information.
+    const rawOutput = JSON.stringify(result, null, 2);
+    const filtered = outputFilter.filter(rawOutput);
+
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(result, null, 2),
+          text: filtered.text,
         },
       ],
     };
