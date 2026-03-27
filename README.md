@@ -1,251 +1,146 @@
-# Solana MCP Server
+# solana-mcp-server
 
-A Model Context Protocol (MCP) server for Solana blockchain interactions, providing comprehensive wallet management, transaction handling, and program interactions.
+[![npm version](https://img.shields.io/npm/v/solana-mcp-server)](https://www.npmjs.com/package/solana-mcp-server)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node](https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js)](https://nodejs.org)
+[![Tools](https://img.shields.io/badge/tools-25-blue)](https://modelcontextprotocol.io)
 
-## Features
+**Full Solana blockchain MCP server.** 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on `@solana/web3.js` and `@solana/spl-token` with Anchor support.
 
-### Wallet Management
-- Create new Solana wallets
-- Import existing wallets from private keys
-- List all managed wallets
-- Get wallet balances (SOL and SPL tokens)
+The most actively maintained Solana MCP. Covers the complete SPL token lifecycle (create, mint, burn, freeze, thaw, delegate, authority management) that competitors skip.
 
-### Transaction Operations
-- Transfer SOL between wallets
-- Transfer SPL tokens
-- Request SOL airdrops (devnet/testnet only)
-- Get transaction details by signature
-
-### Account Management
-- Get detailed account information
-- Create associated token accounts
-- List all token accounts for a wallet
-- Get token balances
-
-### SPL Token Operations (CLI Integration)
-- Create new SPL tokens with custom decimals
-- Mint tokens to any wallet address
-- Burn tokens from accounts
-- Freeze/thaw token accounts
-- Set and manage token authorities (mint, freeze, account owner, close)
-- Get token supply information
-- Close token accounts and reclaim rent
-- Approve/revoke delegates for token operations
-
-### Network Operations
-- Switch between Solana networks (mainnet, devnet, testnet, localhost)
-- Get network information and status
-- Get recent blockhash for transaction building
-
-## Installation
+## Install
 
 ```bash
-npm install
-npm run build
+npx solana-mcp-server
 ```
 
-## Usage
+Or install globally:
 
-### Start the server
 ```bash
-npm start
+npm install -g solana-mcp-server
+solana-mcp-server
 ```
 
-### Available Commands
+## Configure
 
-#### Wallet Management
-- `create_wallet` - Create a new Solana wallet
-- `import_wallet` - Import existing wallet from private key
-- `list_wallets` - List all managed wallets
-- `get_balance` - Get SOL balance for a wallet
-- `get_token_balance` - Get SPL token balance
+Add to your MCP config (`claude_desktop_config.json` or `~/.mcp.json`):
 
-#### Transactions
-- `transfer_sol` - Transfer SOL between wallets
-- `transfer_tokens` - Transfer SPL tokens
-- `airdrop_sol` - Request SOL airdrop (devnet/testnet only)
+```json
+{
+  "mcpServers": {
+    "solana": {
+      "command": "npx",
+      "args": ["-y", "solana-mcp-server"],
+      "env": {
+        "SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com"
+      }
+    }
+  }
+}
+```
 
-#### Account Operations
-- `get_account_info` - Get detailed account information
-- `get_transaction` - Get transaction details by signature
-- `create_token_account` - Create associated token account
-- `get_token_accounts` - List all token accounts for a wallet
+## Tools (25)
 
-#### SPL Token CLI Operations
-- `create_spl_token` - Create a new SPL token with custom decimals
-- `mint_tokens` - Mint tokens to a wallet address
-- `burn_tokens` - Burn tokens from a wallet
-- `freeze_account` - Freeze a token account
-- `thaw_account` - Thaw (unfreeze) a token account
-- `set_token_authority` - Set or change token authority (mint, freeze, account owner, close)
-- `get_token_supply` - Get total supply and info for a token
-- `close_token_account` - Close a token account and reclaim rent
-- `approve_delegate` - Approve a delegate to transfer tokens
-- `revoke_delegate` - Revoke delegate approval
+### Wallet Management (4)
 
-#### Network Operations
-- `switch_network` - Switch Solana network
-- `get_network_info` - Get current network information
-- `get_recent_blockhash` - Get recent blockhash
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `create_wallet` | Create a new Solana keypair (in-memory only) | -- |
+| `import_wallet` | Import from a base58-encoded private key | `privateKey` |
+| `list_wallets` | List all wallets in the current session | -- |
+| `get_balance` | Get SOL balance for any address | `address` |
 
-## Supported Networks
+### SPL Token Operations (10)
 
-- **Mainnet**: Production Solana network
-- **Devnet**: Development network with free SOL airdrops
-- **Testnet**: Testing network
-- **Localhost**: Local Solana validator
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `create_spl_token` | Create a new SPL token with custom decimals | `walletName`, `decimals` |
+| `mint_tokens` | Mint tokens to any address | `walletName`, `tokenMint`, `amount` |
+| `burn_tokens` | Burn tokens from an account | `walletName`, `tokenMint`, `amount` |
+| `freeze_account` | Freeze a token account | `walletName`, `tokenMint`, `accountAddress` |
+| `thaw_account` | Unfreeze a token account | `walletName`, `tokenMint`, `accountAddress` |
+| `set_token_authority` | Change token authority (mint, freeze, owner, close) | `walletName`, `tokenMint`, `authorityType` |
+| `get_token_supply` | Total supply and metadata for a token | `tokenMint` |
+| `close_token_account` | Close an account and reclaim rent | `walletName`, `tokenAccount` |
+| `approve_delegate` | Approve a delegate for token transfers | `walletName`, `tokenAccount`, `delegate`, `amount` |
+| `revoke_delegate` | Revoke delegate approval | `walletName`, `tokenAccount` |
 
-## Security Notes
+### Transfers (3)
 
-- Private keys are stored in memory only (not persisted)
-- For production use, implement secure key storage
-- Never share private keys or commit them to version control
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `transfer_sol` | Transfer SOL between wallets | `from`, `to`, `amount` |
+| `transfer_tokens` | Transfer SPL tokens | `from`, `to`, `tokenMint`, `amount` |
+| `airdrop_sol` | Request SOL airdrop (devnet/testnet only) | `address`, `amount` |
+
+### Account Queries (4)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `get_account_info` | Detailed account information | `address` |
+| `get_transaction` | Transaction details by signature | `signature` |
+| `create_token_account` | Create an associated token account | `walletName`, `tokenMint` |
+| `get_token_accounts` | List all token accounts for a wallet | `address` |
+
+### Token Data (1)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `get_token_balance` | SPL token balance for a specific account | `address`, `tokenMint` |
+
+### Network (3)
+
+| Tool | Description | Key Params |
+|------|-------------|------------|
+| `switch_network` | Switch between mainnet, devnet, testnet, localhost | `network` |
+| `get_network_info` | Current network status and info | -- |
+| `get_recent_blockhash` | Recent blockhash for transaction building | -- |
+
+## Why This One?
+
+- **Complete SPL token lifecycle.** Create, mint, burn, freeze, thaw, set authority, delegate, close -- 10 token tools covering every operation. Competitors stop at create/transfer.
+- **Production-ready infrastructure.** Lazy connection initialization (no startup timeouts), 10-second network call timeouts, comprehensive error handling, and Smithery deployment support.
+- **Anchor integration.** Built with `@coral-xyz/anchor` support for interacting with Anchor programs alongside raw SPL token operations.
+
+## Networks
+
+| Network | Endpoint |
+|---------|----------|
+| `mainnet` | `https://api.mainnet-beta.solana.com` |
+| `devnet` | `https://api.devnet.solana.com` |
+| `testnet` | `https://api.testnet.solana.com` |
+| `localhost` | `http://127.0.0.1:8899` |
+
+## Security
+
+- Private keys stored in memory only -- never persisted to disk
+- Keys cleared on process exit
+- All inputs validated with Zod schemas
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SOLANA_RPC_URL` | No | Solana RPC endpoint (default: mainnet) |
 
 ## Development
 
 ```bash
-# Install dependencies
+git clone https://github.com/ExpertVagabond/solana-mcp-server.git
+cd solana-mcp-server
 npm install
-
-# Build TypeScript
 npm run build
-
-# Run in development mode
-npm run dev
+npm start
 ```
-
-## Deployment
-
-### Smithery Deployment
-
-The server is ready for deployment to Smithery:
 
 ```bash
-# Build for production
-smithery build src/index.ts
-
-# Run locally for testing
-smithery dev src/index.ts
-
-# The server will be available at the provided URL
+npm test              # Basic functionality tests
+npm run type-check    # TypeScript type checking
+npm run lint          # ESLint
+npm run quality       # Full quality check (lint + types + tests)
 ```
-
-### Manual Deployment
-
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Build the project: `npm run build`
-4. Run the server: `npm start`
-
-## Testing
-
-```bash
-# Run basic functionality tests
-node test-simple.js
-
-# Run comprehensive tests
-node test-comprehensive.js
-
-# Run deployment readiness test
-node test-deployment.js
-```
-
-## SPL Token CLI Usage Examples
-
-### Create a new SPL token
-```javascript
-{
-  "walletName": "my-wallet",
-  "decimals": 9,
-  "freezeAuthority": true
-}
-```
-
-### Mint tokens
-```javascript
-{
-  "walletName": "my-wallet",
-  "tokenMint": "TokenMintAddress123...",
-  "destinationAddress": "RecipientAddress456...",
-  "amount": 1000
-}
-```
-
-### Burn tokens
-```javascript
-{
-  "walletName": "my-wallet",
-  "tokenMint": "TokenMintAddress123...",
-  "amount": 100
-}
-```
-
-### Freeze/Thaw accounts
-```javascript
-{
-  "walletName": "my-wallet",
-  "tokenMint": "TokenMintAddress123...",
-  "accountAddress": "AccountToFreeze789..."
-}
-```
-
-### Set token authority
-```javascript
-{
-  "walletName": "my-wallet",
-  "tokenMint": "TokenMintAddress123...",
-  "authorityType": "MintTokens",
-  "newAuthority": "NewAuthorityAddress..."
-}
-```
-
-### Get token supply
-```javascript
-{
-  "tokenMint": "TokenMintAddress123..."
-}
-```
-
-## Features Implemented
-
-✅ **Wallet Management**
-- Create new Solana wallets
-- Import existing wallets from private keys
-- List all managed wallets
-- Get wallet balances (SOL and SPL tokens)
-
-✅ **Transaction Operations**
-- Transfer SOL between wallets
-- Transfer SPL tokens
-- Request SOL airdrops (devnet/testnet only)
-- Get transaction details by signature
-
-✅ **Account Management**
-- Get detailed account information
-- Create associated token accounts
-- List all token accounts for a wallet
-- Get token balances
-
-✅ **SPL Token CLI Operations**
-- Create new SPL tokens with custom parameters
-- Mint and burn tokens
-- Freeze and thaw token accounts
-- Manage token authorities (mint, freeze, account owner, close)
-- Get token supply and metadata
-- Close token accounts and reclaim rent
-- Delegate management for token operations
-
-✅ **Network Operations**
-- Switch between Solana networks (mainnet, devnet, testnet, localhost)
-- Get network information and status
-- Get recent blockhash for transaction building
-
-✅ **Performance Optimizations**
-- Lazy connection initialization (no startup timeouts)
-- Network call timeouts (10s default)
-- Comprehensive error handling
-- Production-ready deployment
 
 ## License
 
-MIT
+MIT -- [Purple Squirrel Media](https://github.com/ExpertVagabond)
