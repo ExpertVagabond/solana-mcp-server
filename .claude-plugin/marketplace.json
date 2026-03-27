@@ -1,0 +1,19 @@
+{
+  "name": "solana-mcp-server",
+  "owner": {
+    "name": "Purple Squirrel Media",
+    "email": "matthew@purplesquirrelmedia.io",
+    "github": "ExpertVagabond"
+  },
+  "plugins": [
+    {
+      "name": "solana-mcp-server",
+      "source": ".",
+      "description": "25-tool Solana blockchain MCP — wallets, tokens, staking, transactions",
+      "version": "1.0.1",
+      "category": "blockchain",
+      "tools": 25,
+      "homepage": "https://github.com/ExpertVagabond/solana-mcp-server"
+    }
+  ]
+}
