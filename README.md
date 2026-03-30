@@ -144,3 +144,8 @@ npm run quality       # Full quality check (lint + types + tests)
 ## License
 
 MIT -- [Purple Squirrel Media](https://github.com/ExpertVagabond)
+
+## Hosted deployment
+
+A hosted deployment is available on [Fronteir AI](https://fronteir.ai/mcp/expertvagabond-solana-mcp-server).
+
