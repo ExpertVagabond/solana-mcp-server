@@ -181,11 +181,26 @@ const NETWORKS: Record<string, string> = {
   testnet: "https://api.testnet.solana.com",
   localhost: "http://127.0.0.1:8899",
 };
-// Wallet store: session-scoped, never persisted to disk, cleared on exit
+// SECURITY NOTE: Keypairs are held in plaintext in process memory for the
+// lifetime of the session.  This is acceptable for a dev/testnet MCP server
+// but MUST NOT be used for mainnet custody.  The clearWallets() helper
+// overwrites the secret key bytes with random data before dropping references
+// so that a post-exit core dump is less likely to leak key material.
 const wallets = new Map<string, { keypair: Keypair; name: string }>();
 let connection: Connection;
 let currentNetwork = "devnet";
 let connectionInitialized = false;
+
+/** Overwrite every stored keypair's secret bytes with random data, then clear the map. */
+function clearWallets(): void {
+  for (const [, entry] of wallets) {
+    try {
+      const secret = entry.keypair.secretKey;          // Uint8Array view
+      crypto.getRandomValues(secret);                  // overwrite in-place
+    } catch (_) { /* best-effort; some runtimes may copy the buffer */ }
+  }
+  wallets.clear();
+}
 
 function initializeConnection(network: string = "devnet") {
   validateNetwork(network);
@@ -200,10 +215,10 @@ function initializeConnection(network: string = "devnet") {
 function ensureConnection() {
   if (!connectionInitialized) { initializeConnection(); connectionInitialized = true; }
 }
-// Security: clear sensitive material on process exit
-process.on("exit", () => { wallets.clear(); });
-process.on("SIGINT", () => { wallets.clear(); process.exit(0); });
-process.on("SIGTERM", () => { wallets.clear(); process.exit(0); });
+// Security: overwrite and clear sensitive material on process exit
+process.on("exit", () => { clearWallets(); });
+process.on("SIGINT", () => { clearWallets(); process.exit(0); });
+process.on("SIGTERM", () => { clearWallets(); process.exit(0); });
 
 // Tool definitions
 const tools: Tool[] = [
