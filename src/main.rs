@@ -242,6 +242,7 @@ fn tool_definitions() -> Value {
         {
             "name": "create_wallet",
             "description": "Create a new Solana wallet",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -253,6 +254,7 @@ fn tool_definitions() -> Value {
         {
             "name": "import_wallet",
             "description": "Import an existing wallet from private key",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": false},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -265,11 +267,13 @@ fn tool_definitions() -> Value {
         {
             "name": "list_wallets",
             "description": "List all created/imported wallets",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": false},
             "inputSchema": {"type": "object", "properties": {}}
         },
         {
             "name": "get_balance",
             "description": "Get SOL balance for a wallet",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -281,6 +285,7 @@ fn tool_definitions() -> Value {
         {
             "name": "get_token_balance",
             "description": "Get SPL token balance for a wallet",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -293,6 +298,7 @@ fn tool_definitions() -> Value {
         {
             "name": "transfer_sol",
             "description": "Transfer SOL between wallets",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -306,6 +312,7 @@ fn tool_definitions() -> Value {
         {
             "name": "transfer_tokens",
             "description": "Transfer SPL tokens between wallets",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -320,6 +327,7 @@ fn tool_definitions() -> Value {
         {
             "name": "airdrop_sol",
             "description": "Request SOL airdrop for testing (devnet/testnet only)",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -332,6 +340,7 @@ fn tool_definitions() -> Value {
         {
             "name": "get_account_info",
             "description": "Get detailed account information",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -343,6 +352,7 @@ fn tool_definitions() -> Value {
         {
             "name": "get_transaction",
             "description": "Get transaction details by signature",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -354,11 +364,13 @@ fn tool_definitions() -> Value {
         {
             "name": "get_recent_blockhash",
             "description": "Get recent blockhash for transaction building",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {"type": "object", "properties": {}}
         },
         {
             "name": "switch_network",
             "description": "Switch Solana network",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": false},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -370,11 +382,13 @@ fn tool_definitions() -> Value {
         {
             "name": "get_network_info",
             "description": "Get current network information",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": false},
             "inputSchema": {"type": "object", "properties": {}}
         },
         {
             "name": "create_token_account",
             "description": "Create associated token account for SPL tokens",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -387,6 +401,7 @@ fn tool_definitions() -> Value {
         {
             "name": "get_token_accounts",
             "description": "Get all token accounts for a wallet",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -398,6 +413,7 @@ fn tool_definitions() -> Value {
         {
             "name": "create_spl_token",
             "description": "Create a new SPL token with specified decimals",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -411,6 +427,7 @@ fn tool_definitions() -> Value {
         {
             "name": "mint_tokens",
             "description": "Mint tokens to a specific account",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -425,6 +442,7 @@ fn tool_definitions() -> Value {
         {
             "name": "burn_tokens",
             "description": "Burn tokens from a wallet",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -438,6 +456,7 @@ fn tool_definitions() -> Value {
         {
             "name": "freeze_account",
             "description": "Freeze a token account to prevent transfers",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -451,6 +470,7 @@ fn tool_definitions() -> Value {
         {
             "name": "thaw_account",
             "description": "Thaw a frozen token account to allow transfers",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -464,6 +484,7 @@ fn tool_definitions() -> Value {
         {
             "name": "set_token_authority",
             "description": "Set or change authority for a token mint or account",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -478,6 +499,7 @@ fn tool_definitions() -> Value {
         {
             "name": "get_token_supply",
             "description": "Get the total supply of a token",
+            "annotations": {"readOnlyHint": true, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -489,6 +511,7 @@ fn tool_definitions() -> Value {
         {
             "name": "close_token_account",
             "description": "Close a token account and reclaim rent",
+            "annotations": {"readOnlyHint": false, "destructiveHint": true, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -502,6 +525,7 @@ fn tool_definitions() -> Value {
         {
             "name": "approve_delegate",
             "description": "Approve a delegate to transfer tokens on your behalf",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": false, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -516,6 +540,7 @@ fn tool_definitions() -> Value {
         {
             "name": "revoke_delegate",
             "description": "Revoke a delegate's authority to transfer tokens",
+            "annotations": {"readOnlyHint": false, "destructiveHint": false, "idempotentHint": true, "openWorldHint": true},
             "inputSchema": {
                 "type": "object",
                 "properties": {
