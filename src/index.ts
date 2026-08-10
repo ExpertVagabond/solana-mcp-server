@@ -24,7 +24,7 @@ import {
   validateNoInjection as psmValidateNoInjection,
   sanitizeError as psmSanitizeError,
   OutputFilter,
-} from "@psm/mcp-core-ts";
+} from "./psm-mcp-core.js";
 
 // ============================================================================
 // SECTION 0: PSM MCP Core — output filter instance (secrets + PII redaction)
