@@ -11,8 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     
     strategy:
+      # Don't let one bad leg cancel the others — a failure on any single
+      # Node version was masking the results of every other version.
+      fail-fast: false
       matrix:
-        node-version: [18, 20]
+        # Node 18 went end-of-life in April 2025 and is below the floor
+        # required by this repo's own toolchain (eslint 10 needs
+        # ^20.19.0 || ^22.13.0 || >=24), so the 18 leg could never pass.
+        node-version: [20]
     
     steps:
     - uses: actions/checkout@v5

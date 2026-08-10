@@ -3,9 +3,9 @@ name: Documentation
 on:
   push:
     branches: [ main, master ]
-    paths: ['docs/**', '*.md', 'src/**/*.ts', 'src/**/*.js']
+    paths: ['docs/**', '*.md', 'src/**/*.ts', 'src/**/*.js', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['docs/**', '*.md', 'src/**/*.ts', 'src/**/*.js']
+    paths: ['docs/**', '*.md', 'src/**/*.ts', 'src/**/*.js', '.github/workflows/docs.yml']
 
 jobs:
   build-docs:
@@ -24,9 +24,13 @@ jobs:
       run: npm ci
     
     - name: Generate TypeDoc
+      # Use the locally installed typedoc (devDependency) so it resolves the
+      # repo's own TypeScript. A bare `npx typedoc` installs typedoc's newest
+      # allowed peer (TypeScript 6.x), which rejects this tsconfig.
+      # `--theme minimal` was removed from typedoc in 0.22 and is now an error.
       run: |
         if [ -f "tsconfig.json" ]; then
-          npx typedoc --out docs/api src --theme minimal
+          npx --no-install typedoc --out docs/api src
         fi
     
     - name: Build docs site
