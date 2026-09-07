@@ -3,6 +3,13 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "node",
+    // node10 resolution is deprecated in TS 6 and removed in TS 7 (TS5107).
+    // Migrating to "bundler" is the real fix, but it changes ambient type
+    // resolution and surfaces unrelated @types/node 26 Buffer errors, so it is
+    // its own piece of work. TS 7 is unreachable regardless: no
+    // @typescript-eslint release accepts it (peer is >=4.8.4 <6.1.0).
+    "ignoreDeprecations": "6.0",
+    "types": ["node"],
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "allowJs": true,

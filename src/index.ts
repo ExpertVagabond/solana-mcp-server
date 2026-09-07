@@ -196,7 +196,12 @@ function clearWallets(): void {
   for (const [, entry] of wallets) {
     try {
       const secret = entry.keypair.secretKey;          // Uint8Array view
-      crypto.getRandomValues(secret);                  // overwrite in-place
+      // @types/node types this as Uint8Array<ArrayBufferLike>, which admits
+      // SharedArrayBuffer and so does not satisfy getRandomValues's
+      // ArrayBufferView<ArrayBuffer>. A Keypair's secretKey is always backed by
+      // a plain ArrayBuffer, so this narrows the type without changing what
+      // runs — the overwrite stays in-place on the same bytes.
+      crypto.getRandomValues(secret as Uint8Array<ArrayBuffer>); // overwrite in-place
     } catch (_) { /* best-effort; some runtimes may copy the buffer */ }
   }
   wallets.clear();
