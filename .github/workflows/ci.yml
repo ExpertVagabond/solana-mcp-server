@@ -12,7 +12,12 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [18, 20]
+        # Node 18 is EOL (April 2025) and cannot run this toolchain at all:
+        # eslint ^10 declares engines ^20.19.0 || ^22.13.0 || >=24, and its
+        # stylish formatter calls util.styleText, added in Node 20.12 —
+        #   TypeError: util.styleText is not a function
+        # so the lint step failed on 18 before reaching any of our code.
+        node-version: [20, 22]
     
     steps:
     - uses: actions/checkout@v5
