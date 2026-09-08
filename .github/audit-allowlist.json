@@ -1,0 +1,36 @@
+{
+  "$comment": "Advisories accepted with a documented reason and an expiry date. audit-gate.mjs fails CI on any advisory at or above the threshold that is NOT listed here, and also fails on entries past their expiry so this file cannot rot silently.",
+  "threshold": "moderate",
+  "allow": [
+    {
+      "id": "GHSA-3gc7-fjrx-p6mg",
+      "package": "bigint-buffer",
+      "reason": "Transitive via @solana/spl-token -> @solana/buffer-layout-utils. Upstream has no patched release; npm's only proposed fix is a downgrade to @solana/spl-token@0.1.8 (semver-major, pre-token-2022) which would break every token tool in this server.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-528h-pc64-c93x",
+      "package": "stream-json",
+      "reason": "Transitive via @solana/web3.js v1 -> jayson. Not reachable from this server: we never parse untrusted streamed JSON-RPC responses through jayson's stream path.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-82x6-q7mm-w9cf",
+      "package": "toml",
+      "reason": "Transitive via @coral-xyz/anchor, used only to read local Anchor.toml at build time. No patched version published; not exposed to remote input.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-v5mp-jgw5-2x6j",
+      "package": "toml",
+      "reason": "Same dependency path and reachability as GHSA-82x6-q7mm-w9cf.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-w5hq-g745-h8pq",
+      "package": "uuid",
+      "reason": "Transitive via @solana/web3.js v1. Affects v3/v5/v6 with a caller-supplied buffer; web3.js calls uuid v4 with no buffer argument, so the bounds check is never reached.",
+      "expires": "2026-12-31"
+    }
+  ]
+}

@@ -26,7 +26,14 @@ jobs:
     - name: Generate TypeDoc
       run: |
         if [ -f "tsconfig.json" ]; then
-          npx typedoc --out docs/api src --theme minimal
+          # Two separate breakages fixed here:
+          #  1. TypeDoc dropped the bundled "minimal" theme; passing a removed
+          #     theme name is a hard error, and "default" is the only one left.
+          #  2. `npx typedoc@latest` installed TypeDoc outside the project, so it
+          #     resolved its own TypeScript, which rejects this repo's
+          #     "ignoreDeprecations": "6.0" with TS5103. --no forces the pinned
+          #     devDependency to be used, against the repo's own TypeScript.
+          npx --no typedoc --out docs/api src
         fi
     
     - name: Build docs site
