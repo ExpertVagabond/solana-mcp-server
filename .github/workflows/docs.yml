@@ -6,6 +6,9 @@ on:
     paths: ['docs/**', '*.md', 'src/**/*.ts', 'src/**/*.js']
   pull_request:
     paths: ['docs/**', '*.md', 'src/**/*.ts', 'src/**/*.js']
+  # The path filters above mean a change to this workflow does not re-run it,
+  # so a fix here cannot be verified without a manual trigger.
+  workflow_dispatch:
 
 jobs:
   build-docs:
