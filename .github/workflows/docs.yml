@@ -10,6 +10,11 @@ on:
   # so a fix here cannot be verified without a manual trigger.
   workflow_dispatch:
 
+# actions-gh-pages pushes the generated site to the gh-pages branch, which the
+# default read-only GITHUB_TOKEN cannot do (it 403s as github-actions[bot]).
+permissions:
+  contents: write
+
 jobs:
   build-docs:
     runs-on: ubuntu-latest
