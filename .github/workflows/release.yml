@@ -5,42 +5,61 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, 'skip ci')"
-    
+
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
       with:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
-    
+
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v5
       with:
         node-version: '20'
         cache: 'npm'
         registry-url: 'https://registry.npmjs.org'
-    
+
     - name: Install dependencies
       run: npm ci
-    
+
     - name: Run tests
       run: npm test --if-present
-    
+
     - name: Build
       run: npm run build --if-present
-    
+
+    # semantic-release publishes to npm by default, so with no NPM_TOKEN it fails
+    # at the last step every single push. Skip the release instead of going red.
+    - name: Check release credentials
+      id: creds
+      env:
+        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      run: |
+        if [ -n "$NPM_TOKEN" ]; then
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "::warning title=Release skipped::NPM_TOKEN is not set on this repository, so semantic-release cannot publish. Add the secret to re-enable releases."
+        fi
+
     - name: Semantic Release
-      uses: cycjimmy/semantic-release-action@v4
+      if: steps.creds.outputs.ready == 'true'
+      uses: cycjimmy/semantic-release-action@v5
       with:
-        semantic_version: 19
+        semantic_version: 24
         extra_plugins: |
           @semantic-release/changelog
           @semantic-release/git
-          @semantic-release/github
-          @semantic-release/npm
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
