@@ -1,0 +1,333 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="./"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>solana-mcp-server</title><meta name="description" content="Documentation for solana-mcp-server"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="assets/style.css"/><link rel="stylesheet" href="assets/highlight.css"/><script defer src="assets/main.js"></script><script async src="assets/icons.js" id="tsd-icons-script"></script><script async src="assets/search.js" id="tsd-search-script"></script><script async src="assets/navigation.js" id="tsd-nav-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container"><a href="index.html" class="title">solana-mcp-server</a>
+<div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/>
+<ul role="listbox" id="tsd-search-results"></ul>
+<div id="tsd-search-status" aria-live="polite" aria-atomic="true">
+<div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-menu"></use></svg></a></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<h1>solana-mcp-server</h1></div>
+<div class="tsd-panel tsd-typography"><h1 id="solana-mcp-server" class="tsd-anchor-link">solana-mcp-server<a href="#solana-mcp-server" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h1>
+<p><a href="https://www.npmjs.com/package/solana-mcp-server"><img src="https://img.shields.io/npm/v/solana-mcp-server" alt="npm version"></a>
+<a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+<a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js" alt="Node"></a>
+<a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/tools-25-blue" alt="Tools"></a></p>
+<p><strong>Full Solana blockchain MCP server.</strong> 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on <code>@solana/web3.js</code> and <code>@solana/spl-token</code> with Anchor support.</p>
+<p>The most actively maintained Solana MCP. Covers the complete SPL token lifecycle (create, mint, burn, freeze, thaw, delegate, authority management) that competitors skip.</p>
+<h2 id="install" class="tsd-anchor-link">Install<a href="#install" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code class="bash"><span class="hl-0">npx</span><span class="hl-1"> </span><span class="hl-2">solana-mcp-server</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Or install globally:</p>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1"> </span><span class="hl-3">-g</span><span class="hl-1"> </span><span class="hl-2">solana-mcp-server</span><br/><span class="hl-0">solana-mcp-server</span>
+</code><button type="button">Copy</button></pre>
+
+<h2 id="configure" class="tsd-anchor-link">Configure<a href="#configure" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Add to your MCP config (<code>claude_desktop_config.json</code> or <code>~/.mcp.json</code>):</p>
+<pre><code class="json"><span class="hl-1">{</span><br/><span class="hl-1">  </span><span class="hl-4">&quot;mcpServers&quot;</span><span class="hl-1">: {</span><br/><span class="hl-1">    </span><span class="hl-4">&quot;solana&quot;</span><span class="hl-1">: {</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;command&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;npx&quot;</span><span class="hl-1">,</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;args&quot;</span><span class="hl-1">: [</span><span class="hl-2">&quot;-y&quot;</span><span class="hl-1">, </span><span class="hl-2">&quot;solana-mcp-server&quot;</span><span class="hl-1">],</span><br/><span class="hl-1">      </span><span class="hl-4">&quot;env&quot;</span><span class="hl-1">: {</span><br/><span class="hl-1">        </span><span class="hl-4">&quot;SOLANA_RPC_URL&quot;</span><span class="hl-1">: </span><span class="hl-2">&quot;https://api.mainnet-beta.solana.com&quot;</span><br/><span class="hl-1">      }</span><br/><span class="hl-1">    }</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">}</span>
+</code><button type="button">Copy</button></pre>
+
+<h2 id="tools-25" class="tsd-anchor-link">Tools (25)<a href="#tools-25" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h3 id="wallet-management-4" class="tsd-anchor-link">Wallet Management (4)<a href="#wallet-management-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Key Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>create_wallet</code></td>
+<td>Create a new Solana keypair (in-memory only)</td>
+<td>--</td>
+</tr>
+<tr>
+<td><code>import_wallet</code></td>
+<td>Import from a base58-encoded private key</td>
+<td><code>privateKey</code></td>
+</tr>
+<tr>
+<td><code>list_wallets</code></td>
+<td>List all wallets in the current session</td>
+<td>--</td>
+</tr>
+<tr>
+<td><code>get_balance</code></td>
+<td>Get SOL balance for any address</td>
+<td><code>address</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="spl-token-operations-10" class="tsd-anchor-link">SPL Token Operations (10)<a href="#spl-token-operations-10" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Key Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>create_spl_token</code></td>
+<td>Create a new SPL token with custom decimals</td>
+<td><code>walletName</code>, <code>decimals</code></td>
+</tr>
+<tr>
+<td><code>mint_tokens</code></td>
+<td>Mint tokens to any address</td>
+<td><code>walletName</code>, <code>tokenMint</code>, <code>amount</code></td>
+</tr>
+<tr>
+<td><code>burn_tokens</code></td>
+<td>Burn tokens from an account</td>
+<td><code>walletName</code>, <code>tokenMint</code>, <code>amount</code></td>
+</tr>
+<tr>
+<td><code>freeze_account</code></td>
+<td>Freeze a token account</td>
+<td><code>walletName</code>, <code>tokenMint</code>, <code>accountAddress</code></td>
+</tr>
+<tr>
+<td><code>thaw_account</code></td>
+<td>Unfreeze a token account</td>
+<td><code>walletName</code>, <code>tokenMint</code>, <code>accountAddress</code></td>
+</tr>
+<tr>
+<td><code>set_token_authority</code></td>
+<td>Change token authority (mint, freeze, owner, close)</td>
+<td><code>walletName</code>, <code>tokenMint</code>, <code>authorityType</code></td>
+</tr>
+<tr>
+<td><code>get_token_supply</code></td>
+<td>Total supply and metadata for a token</td>
+<td><code>tokenMint</code></td>
+</tr>
+<tr>
+<td><code>close_token_account</code></td>
+<td>Close an account and reclaim rent</td>
+<td><code>walletName</code>, <code>tokenAccount</code></td>
+</tr>
+<tr>
+<td><code>approve_delegate</code></td>
+<td>Approve a delegate for token transfers</td>
+<td><code>walletName</code>, <code>tokenAccount</code>, <code>delegate</code>, <code>amount</code></td>
+</tr>
+<tr>
+<td><code>revoke_delegate</code></td>
+<td>Revoke delegate approval</td>
+<td><code>walletName</code>, <code>tokenAccount</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="transfers-3" class="tsd-anchor-link">Transfers (3)<a href="#transfers-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Key Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>transfer_sol</code></td>
+<td>Transfer SOL between wallets</td>
+<td><code>from</code>, <code>to</code>, <code>amount</code></td>
+</tr>
+<tr>
+<td><code>transfer_tokens</code></td>
+<td>Transfer SPL tokens</td>
+<td><code>from</code>, <code>to</code>, <code>tokenMint</code>, <code>amount</code></td>
+</tr>
+<tr>
+<td><code>airdrop_sol</code></td>
+<td>Request SOL airdrop (devnet/testnet only)</td>
+<td><code>address</code>, <code>amount</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="account-queries-4" class="tsd-anchor-link">Account Queries (4)<a href="#account-queries-4" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Key Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_account_info</code></td>
+<td>Detailed account information</td>
+<td><code>address</code></td>
+</tr>
+<tr>
+<td><code>get_transaction</code></td>
+<td>Transaction details by signature</td>
+<td><code>signature</code></td>
+</tr>
+<tr>
+<td><code>create_token_account</code></td>
+<td>Create an associated token account</td>
+<td><code>walletName</code>, <code>tokenMint</code></td>
+</tr>
+<tr>
+<td><code>get_token_accounts</code></td>
+<td>List all token accounts for a wallet</td>
+<td><code>address</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="token-data-1" class="tsd-anchor-link">Token Data (1)<a href="#token-data-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Key Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>get_token_balance</code></td>
+<td>SPL token balance for a specific account</td>
+<td><code>address</code>, <code>tokenMint</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="network-3" class="tsd-anchor-link">Network (3)<a href="#network-3" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Description</th>
+<th>Key Params</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>switch_network</code></td>
+<td>Switch between mainnet, devnet, testnet, localhost</td>
+<td><code>network</code></td>
+</tr>
+<tr>
+<td><code>get_network_info</code></td>
+<td>Current network status and info</td>
+<td>--</td>
+</tr>
+<tr>
+<td><code>get_recent_blockhash</code></td>
+<td>Recent blockhash for transaction building</td>
+<td>--</td>
+</tr>
+</tbody>
+</table>
+<h2 id="why-this-one" class="tsd-anchor-link">Why This One?<a href="#why-this-one" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li><strong>Complete SPL token lifecycle.</strong> Create, mint, burn, freeze, thaw, set authority, delegate, close -- 10 token tools covering every operation. Competitors stop at create/transfer.</li>
+<li><strong>Production-ready infrastructure.</strong> Lazy connection initialization (no startup timeouts), 10-second network call timeouts, comprehensive error handling, and Smithery deployment support.</li>
+<li><strong>Anchor integration.</strong> Built with <code>@coral-xyz/anchor</code> support for interacting with Anchor programs alongside raw SPL token operations.</li>
+</ul>
+<h2 id="networks" class="tsd-anchor-link">Networks<a href="#networks" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>Endpoint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mainnet</code></td>
+<td><code>https://api.mainnet-beta.solana.com</code></td>
+</tr>
+<tr>
+<td><code>devnet</code></td>
+<td><code>https://api.devnet.solana.com</code></td>
+</tr>
+<tr>
+<td><code>testnet</code></td>
+<td><code>https://api.testnet.solana.com</code></td>
+</tr>
+<tr>
+<td><code>localhost</code></td>
+<td><code>http://127.0.0.1:8899</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="security" class="tsd-anchor-link">Security<a href="#security" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<ul>
+<li>Private keys stored in memory only -- never persisted to disk</li>
+<li>Keys cleared on process exit</li>
+<li>All inputs validated with Zod schemas</li>
+</ul>
+<h2 id="environment-variables" class="tsd-anchor-link">Environment Variables<a href="#environment-variables" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SOLANA_RPC_URL</code></td>
+<td>No</td>
+<td>Solana RPC endpoint (default: mainnet)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="development" class="tsd-anchor-link">Development<a href="#development" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<pre><code class="bash"><span class="hl-0">git</span><span class="hl-1"> </span><span class="hl-2">clone</span><span class="hl-1"> </span><span class="hl-2">https://github.com/ExpertVagabond/solana-mcp-server.git</span><br/><span class="hl-0">cd</span><span class="hl-1"> </span><span class="hl-2">solana-mcp-server</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">build</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">start</span>
+</code><button type="button">Copy</button></pre>
+
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">test</span><span class="hl-1">              </span><span class="hl-5"># Basic functionality tests</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">type-check</span><span class="hl-1">    </span><span class="hl-5"># TypeScript type checking</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">lint</span><span class="hl-1">          </span><span class="hl-5"># ESLint</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">quality</span><span class="hl-1">       </span><span class="hl-5"># Full quality check (lint + types + tests)</span>
+</code><button type="button">Copy</button></pre>
+
+<h2 id="license" class="tsd-anchor-link">License<a href="#license" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>MIT -- <a href="https://github.com/ExpertVagabond">Purple Squirrel Media</a></p>
+</div></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div>
+<div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="assets/icons.svg#icon-chevronDown"></use></svg>
+<h3>On This Page</h3></summary>
+<div class="tsd-accordion-details"><a href="#solana-mcp-server"><span>solana-<wbr/>mcp-<wbr/>server</span></a>
+<ul>
+<li><a href="#install"><span>Install</span></a></li>
+<li><a href="#configure"><span>Configure</span></a></li>
+<li><a href="#tools-25"><span>Tools (25)</span></a></li>
+<li>
+<ul>
+<li><a href="#wallet-management-4"><span>Wallet <wbr/>Management (4)</span></a></li>
+<li><a href="#spl-token-operations-10"><span>SPL <wbr/>Token <wbr/>Operations (10)</span></a></li>
+<li><a href="#transfers-3"><span>Transfers (3)</span></a></li>
+<li><a href="#account-queries-4"><span>Account <wbr/>Queries (4)</span></a></li>
+<li><a href="#token-data-1"><span>Token <wbr/>Data (1)</span></a></li>
+<li><a href="#network-3"><span>Network (3)</span></a></li></ul></li>
+<li><a href="#why-this-one"><span>Why <wbr/>This <wbr/>One?</span></a></li>
+<li><a href="#networks"><span>Networks</span></a></li>
+<li><a href="#security"><span>Security</span></a></li>
+<li><a href="#environment-variables"><span>Environment <wbr/>Variables</span></a></li>
+<li><a href="#development"><span>Development</span></a></li>
+<li><a href="#license"><span>License</span></a></li></ul></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="modules.html">solana-mcp-server</a>
+<ul class="tsd-small-nested-navigation" id="tsd-nav-container">
+<li>Loading...</li></ul></nav></div></div></div><footer>
+<p class="tsd-generator">Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></footer>
+<div class="overlay"></div></body></html>
