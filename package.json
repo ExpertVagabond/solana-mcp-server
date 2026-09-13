@@ -75,5 +75,8 @@
   "bugs": {
     "url": "https://github.com/ExpertVagabond/solana-mcp-server/issues"
   },
-  "homepage": "https://github.com/ExpertVagabond/solana-mcp-server#readme"
+  "homepage": "https://github.com/ExpertVagabond/solana-mcp-server#readme",
+  "overrides": {
+    "toml": "^4.2.0"
+  }
 }
