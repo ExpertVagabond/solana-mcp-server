@@ -1,7 +1,7 @@
 {
   "name": "solana-mcp-server",
   "mcpName": "io.github.ExpertVagabond/solana",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Solana MCP server for wallet management, transaction handling, and program interactions on Solana blockchain",
   "main": "dist/index.js",
   "bin": {
@@ -16,7 +16,7 @@
     "build:smithery": "npx @smithery/cli build",
     "dev": "npx @smithery/cli dev",
     "start": "node dist/index.js",
-    "test": "node test-simple.js",
+    "test": "node test-simple.js && node test-bin.js",
     "test:jest": "jest",
     "prepare": "npm run build",
     "publish:npm": "npm publish --access public",
