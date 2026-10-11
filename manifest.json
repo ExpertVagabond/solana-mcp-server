@@ -1,0 +1,148 @@
+{
+  "manifest_version": "0.2",
+  "name": "solana-mcp-server",
+  "version": "1.1.1",
+  "description": "Solana wallets, SOL and SPL token transfers, token minting and authority management, account and transaction lookups across devnet, testnet and mainnet.",
+  "author": {
+    "name": "ExpertVagabond"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {}
+    }
+  },
+  "license": "MIT",
+  "display_name": "Solana MCP Server",
+  "homepage": "https://github.com/ExpertVagabond/solana-mcp-server",
+  "documentation": "https://expertvagabond.github.io/solana-mcp-server/",
+  "support": "https://github.com/ExpertVagabond/solana-mcp-server/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ExpertVagabond/solana-mcp-server.git"
+  },
+  "keywords": [
+    "solana",
+    "blockchain",
+    "wallet",
+    "spl-token",
+    "web3"
+  ],
+  "tools": [
+    {
+      "name": "create_wallet",
+      "description": "Create a new Solana wallet"
+    },
+    {
+      "name": "import_wallet",
+      "description": "Import an existing wallet from private key or mnemonic"
+    },
+    {
+      "name": "list_wallets",
+      "description": "List all created/imported wallets"
+    },
+    {
+      "name": "get_balance",
+      "description": "Get SOL balance for a wallet"
+    },
+    {
+      "name": "get_token_balance",
+      "description": "Get SPL token balance for a wallet"
+    },
+    {
+      "name": "transfer_sol",
+      "description": "Transfer SOL between wallets"
+    },
+    {
+      "name": "transfer_tokens",
+      "description": "Transfer SPL tokens between wallets"
+    },
+    {
+      "name": "airdrop_sol",
+      "description": "Request SOL airdrop for testing (devnet/testnet only)"
+    },
+    {
+      "name": "get_account_info",
+      "description": "Get detailed account information"
+    },
+    {
+      "name": "get_transaction",
+      "description": "Get transaction details by signature"
+    },
+    {
+      "name": "get_recent_blockhash",
+      "description": "Get recent blockhash for transaction building"
+    },
+    {
+      "name": "switch_network",
+      "description": "Switch Solana network"
+    },
+    {
+      "name": "get_network_info",
+      "description": "Get current network information"
+    },
+    {
+      "name": "create_token_account",
+      "description": "Create associated token account for SPL tokens"
+    },
+    {
+      "name": "get_token_accounts",
+      "description": "Get all token accounts for a wallet"
+    },
+    {
+      "name": "create_spl_token",
+      "description": "Create a new SPL token with specified decimals"
+    },
+    {
+      "name": "mint_tokens",
+      "description": "Mint tokens to a specific account"
+    },
+    {
+      "name": "burn_tokens",
+      "description": "Burn tokens from a wallet"
+    },
+    {
+      "name": "freeze_account",
+      "description": "Freeze a token account to prevent transfers"
+    },
+    {
+      "name": "thaw_account",
+      "description": "Thaw a frozen token account to allow transfers"
+    },
+    {
+      "name": "set_token_authority",
+      "description": "Set or change authority for a token mint or account"
+    },
+    {
+      "name": "get_token_supply",
+      "description": "Get the total supply of a token"
+    },
+    {
+      "name": "close_token_account",
+      "description": "Close a token account and reclaim rent"
+    },
+    {
+      "name": "approve_delegate",
+      "description": "Approve a delegate to transfer tokens on your behalf"
+    },
+    {
+      "name": "revoke_delegate",
+      "description": "Revoke a delegate's authority to transfer tokens"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}
