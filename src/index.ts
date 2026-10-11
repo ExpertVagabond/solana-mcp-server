@@ -15,7 +15,8 @@
  */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, InitializeRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
+import { createRequire } from "node:module";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount, createMint, mintTo, burn, freezeAccount, thawAccount, setAuthority, AuthorityType, getMint, closeAccount, approve, revoke } from "@solana/spl-token";
 import bs58 from "bs58";
@@ -1513,11 +1514,14 @@ async function handleRevokeDelegate(args: Record<string, unknown>) {
   };
 }
 
-// Main server setup
+// Main server setup. The SDK answers `initialize` itself and negotiates the
+// newest protocol version both sides support; don't override it.
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+
 const server = new Server(
   {
     name: "solana-mcp-server",
-    version: "1.0.0",
+    version,
   },
   {
     capabilities: {
@@ -1525,20 +1529,6 @@ const server = new Server(
     },
   }
 );
-
-// Initialize handler - REQUIRED for MCP protocol
-server.setRequestHandler(InitializeRequestSchema, async (request) => {
-  return {
-    protocolVersion: "2024-11-05",
-    capabilities: {
-      tools: {},
-    },
-    serverInfo: {
-      name: "solana-mcp-server",
-      version: "1.0.0",
-    },
-  };
-});
 
 // List tools handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
