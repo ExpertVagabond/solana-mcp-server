@@ -5,7 +5,7 @@
   "description": "Solana MCP server for wallet management, transaction handling, and program interactions on Solana blockchain",
   "main": "dist/index.js",
   "bin": {
-    "solana-mcp-server": "./dist/index.js"
+    "solana-mcp-server": "dist/index.js"
   },
   "files": [
     "dist"
@@ -70,7 +70,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ExpertVagabond/solana-mcp-server.git"
+    "url": "git+https://github.com/ExpertVagabond/solana-mcp-server.git"
   },
   "bugs": {
     "url": "https://github.com/ExpertVagabond/solana-mcp-server/issues"
