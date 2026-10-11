@@ -12,14 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
     steps:
-      - name: Enable auto-merge for Dependabot PRs
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+
+      # Auto-merge waits for the required checks on master (ci (20), ci (22),
+      # security). Before branch protection existed it merged at once, which is
+      # how #93 landed TypeScript 7 with all three red. Majors wait for a human.
+      # No approve step: Actions may not approve PRs, and none is required.
+      - name: Enable auto-merge for patch and minor updates
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{github.event.pull_request.html_url}}
-          GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
-          
-      - name: Approve PR
-        run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{github.event.pull_request.html_url}}
           GH_TOKEN: ${{secrets.GITHUB_TOKEN}}
