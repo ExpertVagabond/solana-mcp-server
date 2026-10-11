@@ -17,6 +17,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createRequire } from "node:module";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount, createMint, mintTo, burn, freezeAccount, thawAccount, setAuthority, AuthorityType, getMint, closeAccount, approve, revoke } from "@solana/spl-token";
 import bs58 from "bs58";
@@ -1674,9 +1676,16 @@ async function main() {
   }
 }
 
-// Only run standalone if this is the main module (ES modules check)
-const entryScript = typeof process !== "undefined" ? process.argv[1] ?? "" : "";
-const isMainModule = entryScript.endsWith("/index.js") || entryScript === "index.js";
+// Only run standalone if this is the main module (ES modules check). npx and
+// global installs launch us through a node_modules/.bin symlink, so argv[1]
+// ends in "solana-mcp-server", not "index.js": resolve it before comparing.
+const isMainModule = (() => {
+  try {
+    return realpathSync(process.argv[1] ?? "") === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
 if (isMainModule) {
   main().catch((error) => {
     console.error("Server error:", sanitizeError(error));
