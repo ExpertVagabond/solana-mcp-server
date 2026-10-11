@@ -15,15 +15,21 @@
       "expires": "2026-12-31"
     },
     {
-      "id": "GHSA-82x6-q7mm-w9cf",
-      "package": "toml",
-      "reason": "Transitive via @coral-xyz/anchor, used only to read local Anchor.toml at build time. No patched version published; not exposed to remote input.",
+      "id": "GHSA-hqr4-qq8f-hg3x",
+      "package": "stream-json",
+      "reason": "Same path as GHSA-528h-pc64-c93x. Verified unreachable: web3.js imports only jayson/lib/client/browser, which requires generateRequest and uuid; stream-json is loaded only by jayson/lib/utils.js, which that client never touches. Only fix npm offers is @solana/spl-token@0.1.8.",
       "expires": "2026-12-31"
     },
     {
-      "id": "GHSA-v5mp-jgw5-2x6j",
-      "package": "toml",
-      "reason": "Same dependency path and reachability as GHSA-82x6-q7mm-w9cf.",
+      "id": "GHSA-mjw6-4jj6-33hc",
+      "package": "stream-json",
+      "reason": "Same path and reachability as GHSA-hqr4-qq8f-hg3x.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-hp3w-g68c-fv3c",
+      "package": "sprintf-js",
+      "reason": "Dev-only: ts-jest -> babel-plugin-istanbul -> @istanbuljs/load-nyc-config -> js-yaml -> argparse@1, which pins sprintf-js ~1.0.3. Runs only in coverage tooling, never shipped to npm users and never fed remote input.",
       "expires": "2026-12-31"
     },
     {
