@@ -7,7 +7,7 @@
 
 **Full Solana blockchain MCP server.** 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on `@solana/web3.js` and `@solana/spl-token` with Anchor support.
 
-The most actively maintained Solana MCP. Covers the complete SPL token lifecycle (create, mint, burn, freeze, thaw, delegate, authority management) that competitors skip.
+Covers the SPL token lifecycle implemented in this repository: create, mint, burn, freeze, thaw, delegate, and authority management. The exact supported surface is listed below and tested through the repository's quality scripts.
 
 ## Install
 
@@ -100,7 +100,7 @@ Add to your MCP config (`claude_desktop_config.json` or `~/.mcp.json`):
 ## Why This One?
 
 - **Complete SPL token lifecycle.** Create, mint, burn, freeze, thaw, set authority, delegate, close -- 10 token tools covering every operation. Competitors stop at create/transfer.
-- **Production-ready infrastructure.** Lazy connection initialization (no startup timeouts), 10-second network call timeouts, comprehensive error handling, and Smithery deployment support.
+- **Operational safeguards.** Lazy connection initialization, 10-second network-call timeouts, structured error handling, and Smithery deployment support.
 - **Anchor integration.** Built with `@coral-xyz/anchor` support for interacting with Anchor programs alongside raw SPL token operations.
 
 ## Networks
