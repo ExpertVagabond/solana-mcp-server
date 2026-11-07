@@ -267,6 +267,15 @@ function optionValue<T>(option: unknown): T | null {
   return null;
 }
 
+function formatTokenAmount(rawAmount: bigint, decimals: number): string {
+  if (decimals === 0) return rawAmount.toString();
+  const negative = rawAmount < 0n;
+  const digits = (negative ? -rawAmount : rawAmount).toString().padStart(decimals + 1, "0");
+  const whole = digits.slice(0, -decimals);
+  const fraction = digits.slice(-decimals).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
 /** Overwrite every stored keypair's secret bytes with random data, then clear the map. */
 function clearWallets(): void {
   for (const [, entry] of wallets) {
@@ -292,9 +301,10 @@ function initializeConnection(network: string = "devnet") {
   }
   currentNetwork = network;
   connection = new Connection(url, "confirmed");
+  connectionInitialized = true;
 }
 function ensureConnection() {
-  if (!connectionInitialized) { initializeConnection(); connectionInitialized = true; }
+  if (!connectionInitialized) initializeConnection();
 }
 // Security: overwrite and clear sensitive material on process exit
 process.on("exit", () => { clearWallets(); });
@@ -1475,7 +1485,7 @@ async function handleGetTokenSupply(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
 
   const mintInfo = await getMintData(tokenMintPubkey);
-  const supply = Number(mintInfo.supply) / Math.pow(10, mintInfo.decimals);
+  const supply = formatTokenAmount(mintInfo.supply, mintInfo.decimals);
 
   return {
     tokenMint,
@@ -1710,7 +1720,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Filter all output through PSM OutputFilter to redact secrets and PII.
     // Solana RPC can return account data containing sensitive information.
-    const rawOutput = JSON.stringify(result, null, 2);
+    // Solana web3.js v3 deliberately returns bigint for lossless RPC values.
+    // JSON has no bigint type, so expose exact decimal strings at the MCP edge.
+    const rawOutput = JSON.stringify(
+      result,
+      (_key, value) => typeof value === "bigint" ? value.toString() : value,
+      2
+    );
     const filtered = outputFilter.filter(rawOutput);
 
     return {
