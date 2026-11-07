@@ -19,8 +19,27 @@ import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from "@modelconte
 import { createRequire } from "node:module";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { Connection, Keypair, PublicKey, Transaction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, getAccount, createMint, mintTo, burn, freezeAccount, thawAccount, setAuthority, AuthorityType, getMint, closeAccount, approve, revoke } from "@solana/spl-token";
+import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { AccountRole, address, type Address, type Instruction } from "@solana/kit";
+import {
+  AuthorityType,
+  TOKEN_PROGRAM_ADDRESS,
+  findAssociatedTokenPda,
+  getApproveInstruction,
+  getBurnInstruction,
+  getCloseAccountInstruction,
+  getCreateAssociatedTokenInstructionAsync,
+  getFreezeAccountInstruction,
+  getInitializeMint2Instruction,
+  getMintDecoder,
+  getMintSize,
+  getMintToInstruction,
+  getRevokeInstruction,
+  getSetAuthorityInstruction,
+  getThawAccountInstruction,
+  getTokenDecoder,
+  getTransferInstruction,
+} from "@solana-program/token";
 import bs58 from "bs58";
 import { z } from "zod";
 import {
@@ -194,6 +213,100 @@ let connection: Connection;
 let currentNetwork = "devnet";
 let connectionInitialized = false;
 
+function asAddress(value: PublicKey | string): Address {
+  return address(typeof value === "string" ? value : value.toBase58());
+}
+
+/** Convert a Codama/Kit instruction into the class-based v3 instruction. */
+function toWeb3Instruction(ix: Instruction): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programAddress),
+    keys: (ix.accounts ?? []).map(accountMeta => ({
+      pubkey: new PublicKey(accountMeta.address),
+      isSigner: accountMeta.role === AccountRole.READONLY_SIGNER || accountMeta.role === AccountRole.WRITABLE_SIGNER,
+      isWritable: accountMeta.role === AccountRole.WRITABLE || accountMeta.role === AccountRole.WRITABLE_SIGNER,
+    })),
+    data: new Uint8Array(ix.data ?? []),
+  });
+}
+
+async function associatedTokenAddress(mint: PublicKey | string, owner: PublicKey | string): Promise<PublicKey> {
+  const [ata] = await findAssociatedTokenPda({
+    mint: asAddress(mint),
+    owner: asAddress(owner),
+    tokenProgram: TOKEN_PROGRAM_ADDRESS,
+  });
+  return new PublicKey(ata);
+}
+
+async function getTokenAccountData(tokenAccount: PublicKey) {
+  const info = await withTimeout(connection.getAccountInfo(tokenAccount));
+  if (!info) throw new Error("TokenAccountNotFoundError");
+  return getTokenDecoder().decode(info.data);
+}
+
+async function getMintData(mint: PublicKey) {
+  const info = await withTimeout(connection.getAccountInfo(mint));
+  if (!info) throw new Error("TokenMintNotFoundError");
+  return getMintDecoder().decode(info.data);
+}
+
+async function sendTokenInstruction(wallet: Keypair, instruction: Instruction): Promise<string> {
+  const transaction = new Transaction().add(toWeb3Instruction(instruction));
+  return sendAndConfirm(transaction, [wallet]);
+}
+
+function optionValue<T>(option: unknown): T | null {
+  if (option && typeof option === "object" && "value" in option) {
+    return (option as { value: T }).value;
+  }
+  return null;
+}
+
+function formatTokenAmount(rawAmount: bigint, decimals: number): string {
+  if (decimals === 0) return rawAmount.toString();
+  const negative = rawAmount < 0n;
+  const digits = (negative ? -rawAmount : rawAmount).toString().padStart(decimals + 1, "0");
+  const whole = digits.slice(0, -decimals);
+  const fraction = digits.slice(-decimals).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+/** Convert a UI token amount to base units. Going through toFixed avoids float error: 8.2 * 10**6 is 8199999.999999999 in floating point. */
+function toRawAmount(amount: number, decimals: number): bigint {
+  return BigInt(amount.toFixed(decimals).replace(".", ""));
+}
+
+/** Thrown when a transaction was sent but not confirmed in time. Carries the signature so the caller can check it. */
+class PendingTransactionError extends Error {
+  constructor(readonly signature: string) {
+    super(`Transaction ${signature} was sent but not confirmed in time.`);
+  }
+}
+
+/** Overview: sign, send, and wait for `confirmed` before returning, so a read right after the call sees the change. */
+async function sendAndConfirm(transaction: Transaction, signers: Keypair[]): Promise<string> {
+  const latest = await withTimeout(connection.getLatestBlockhash());
+  transaction.recentBlockhash = latest.blockhash;
+  transaction.feePayer = signers[0].publicKey;
+  await transaction.sign(...signers);
+  const signature = await withTimeout(connection.sendTransaction(transaction, signers), 30000);
+  let value;
+  try {
+    ({ value } = await withTimeout(
+      connection.confirmTransaction({ signature, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight }, "confirmed"),
+      60000
+    ));
+  } catch {
+    // The transaction may still land. Do not let a caller resend it blindly (that can double a mint or transfer).
+    throw new PendingTransactionError(signature);
+  }
+  if (value.err) {
+    throw new Error(`Transaction ${signature} failed: ${JSON.stringify(value.err, (_key, v) => typeof v === "bigint" ? v.toString() : v)}`);
+  }
+  return signature;
+}
+
 /** Overwrite every stored keypair's secret bytes with random data, then clear the map. */
 function clearWallets(): void {
   for (const [, entry] of wallets) {
@@ -219,9 +332,10 @@ function initializeConnection(network: string = "devnet") {
   }
   currentNetwork = network;
   connection = new Connection(url, "confirmed");
+  connectionInitialized = true;
 }
 function ensureConnection() {
-  if (!connectionInitialized) { initializeConnection(); connectionInitialized = true; }
+  if (!connectionInitialized) initializeConnection();
 }
 // Security: overwrite and clear sensitive material on process exit
 process.on("exit", () => { clearWallets(); });
@@ -692,7 +806,7 @@ async function handleCreateWallet(args: Record<string, unknown>) {
     throw new Error(`Wallet with name '${name}' already exists`);
   }
 
-  const keypair = Keypair.generate();
+  const keypair = await Keypair.generate();
   wallets.set(name, { keypair, name });
 
   return {
@@ -720,7 +834,7 @@ async function handleImportWallet(args: Record<string, unknown>) {
     if (secretKey.length !== 64) {
       throw new Error("Invalid secret key length");
     }
-    const keypair = Keypair.fromSecretKey(secretKey);
+    const keypair = await Keypair.fromSecretKey(secretKey);
     wallets.set(name, { keypair, name });
 
     return {
@@ -760,13 +874,15 @@ async function handleGetBalance(args: Record<string, unknown>) {
 
   ensureConnection();
   const balance = await withTimeout(connection.getBalance(wallet.keypair.publicKey));
-  const solBalance = balance / LAMPORTS_PER_SOL;
+  // web3.js v3 returns lamports as bigint. Convert only the human-readable
+  // SOL value to number; preserve the exact lamport value as a decimal string.
+  const solBalance = Number(balance) / LAMPORTS_PER_SOL;
 
   return {
     wallet: walletName,
     address: wallet.keypair.publicKey.toString(),
     balance: {
-      lamports: balance,
+      lamports: balance.toString(),
       sol: solBalance
     }
   };
@@ -785,16 +901,18 @@ async function handleGetTokenBalance(args: Record<string, unknown>) {
 
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
-  const tokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
+  const tokenAccount = await associatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
 
   try {
-    const accountInfo = await withTimeout(getAccount(connection, tokenAccount));
+    const accountInfo = await getTokenAccountData(tokenAccount);
+    const mintInfo = await getMintData(tokenMintPubkey);
 
     return {
       wallet: walletName,
       tokenMint: tokenMint,
       balance: accountInfo.amount.toString(),
-      decimals: accountInfo.mint.toString()
+      uiBalance: formatTokenAmount(accountInfo.amount, mintInfo.decimals),
+      mint: accountInfo.mint.toString()
     };
   } catch (error: unknown) {
     // Distinguish "account not found" from network/timeout errors
@@ -804,6 +922,7 @@ async function handleGetTokenBalance(args: Record<string, unknown>) {
         wallet: walletName,
         tokenMint: tokenMint,
         balance: "0",
+        uiBalance: "0",
         note: "Token account does not exist for this wallet"
       };
     }
@@ -839,7 +958,7 @@ async function handleTransferSol(args: Record<string, unknown>) {
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.keypair.publicKey;
 
-  transaction.sign(wallet.keypair);
+  await transaction.sign(wallet.keypair);
 
   const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
 
@@ -867,15 +986,16 @@ async function handleTransferTokens(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const toPubkey = new PublicKey(toAddress);
 
-  const fromTokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
-  const toTokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, toPubkey);
+  const mintInfo = await getMintData(tokenMintPubkey);
+  const fromTokenAccount = await associatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
+  const toTokenAccount = await associatedTokenAddress(tokenMintPubkey, toPubkey);
 
   const transaction = new Transaction();
 
   // Check if recipient has token account, create if not
   let recipientAccountExists = false;
   try {
-    await withTimeout(getAccount(connection, toTokenAccount));
+    await getTokenAccountData(toTokenAccount);
     recipientAccountExists = true;
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -891,31 +1011,25 @@ async function handleTransferTokens(args: Record<string, unknown>) {
 
   if (!recipientAccountExists) {
     transaction.add(
-      createAssociatedTokenAccountInstruction(
-        wallet.keypair.publicKey,
-        toTokenAccount,
-        toPubkey,
-        tokenMintPubkey
-      )
+      toWeb3Instruction(await getCreateAssociatedTokenInstructionAsync({
+        payer: wallet.keypair,
+        ata: asAddress(toTokenAccount),
+        owner: asAddress(toPubkey),
+        mint: asAddress(tokenMintPubkey),
+      }))
     );
   }
 
   transaction.add(
-    createTransferInstruction(
-      fromTokenAccount,
-      toTokenAccount,
-      wallet.keypair.publicKey,
-      BigInt(Math.floor(amount))
-    )
+    toWeb3Instruction(getTransferInstruction({
+      source: asAddress(fromTokenAccount),
+      destination: asAddress(toTokenAccount),
+      authority: wallet.keypair,
+      amount: toRawAmount(amount, mintInfo.decimals),
+    }))
   );
 
-  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = wallet.keypair.publicKey;
-
-  transaction.sign(wallet.keypair);
-
-  const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
+  const signature = await sendAndConfirm(transaction, [wallet.keypair]);
 
   return {
     success: true,
@@ -971,7 +1085,7 @@ async function handleGetAccountInfo(args: Record<string, unknown>) {
   return {
     address,
     exists: true,
-    lamports: accountInfo.lamports,
+    lamports: accountInfo.lamports.toString(),
     owner: accountInfo.owner.toString(),
     executable: accountInfo.executable,
     rentEpoch: accountInfo.rentEpoch,
@@ -1056,22 +1170,22 @@ async function handleCreateTokenAccount(args: Record<string, unknown>) {
 
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
-  const tokenAccount = await getAssociatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
+  const tokenAccount = await associatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
 
   const transaction = new Transaction().add(
-    createAssociatedTokenAccountInstruction(
-      wallet.keypair.publicKey,
-      tokenAccount,
-      wallet.keypair.publicKey,
-      tokenMintPubkey
-    )
+    toWeb3Instruction(await getCreateAssociatedTokenInstructionAsync({
+      payer: wallet.keypair,
+      ata: asAddress(tokenAccount),
+      owner: asAddress(wallet.keypair.publicKey),
+      mint: asAddress(tokenMintPubkey),
+    }))
   );
 
   const { blockhash } = await withTimeout(connection.getLatestBlockhash());
   transaction.recentBlockhash = blockhash;
   transaction.feePayer = wallet.keypair.publicKey;
 
-  transaction.sign(wallet.keypair);
+  await transaction.sign(wallet.keypair);
 
   const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
 
@@ -1131,14 +1245,26 @@ async function handleCreateSplToken(args: Record<string, unknown>) {
   ensureConnection();
 
   const freezeAuthorityPubkey = freezeAuthority ? wallet.keypair.publicKey : null;
-
-  const mint = await withTimeout(createMint(
-    connection,
-    wallet.keypair,
-    wallet.keypair.publicKey,
-    freezeAuthorityPubkey,
-    decimals
-  ), 30000);
+  const mintKeypair = await Keypair.generate();
+  const mintSize = getMintSize();
+  const rent = await withTimeout(connection.getMinimumBalanceForRentExemption(mintSize));
+  const transaction = new Transaction().add(
+    SystemProgram.createAccount({
+      fromPubkey: wallet.keypair.publicKey,
+      newAccountPubkey: mintKeypair.publicKey,
+      lamports: rent,
+      space: mintSize,
+      programId: new PublicKey(TOKEN_PROGRAM_ADDRESS),
+    }),
+    toWeb3Instruction(getInitializeMint2Instruction({
+      mint: asAddress(mintKeypair.publicKey),
+      decimals,
+      mintAuthority: asAddress(wallet.keypair.publicKey),
+      freezeAuthority: freezeAuthorityPubkey ? asAddress(freezeAuthorityPubkey) : null,
+    }))
+  );
+  await sendAndConfirm(transaction, [wallet.keypair, mintKeypair]);
+  const mint = mintKeypair.publicKey;
 
   return {
     success: true,
@@ -1167,10 +1293,10 @@ async function handleMintTokens(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const destinationPubkey = new PublicKey(destinationAddress);
 
-  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
-  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+  const mintInfo = await getMintData(tokenMintPubkey);
+  const rawAmount = toRawAmount(amount, mintInfo.decimals);
 
-  const destinationTokenAccount = await getAssociatedTokenAddress(
+  const destinationTokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
     destinationPubkey
   );
@@ -1178,7 +1304,7 @@ async function handleMintTokens(args: Record<string, unknown>) {
   // Check if destination token account exists, create if not
   let destAccountExists = false;
   try {
-    await withTimeout(getAccount(connection, destinationTokenAccount));
+    await getTokenAccountData(destinationTokenAccount);
     destAccountExists = true;
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -1193,31 +1319,24 @@ async function handleMintTokens(args: Record<string, unknown>) {
 
   if (!destAccountExists) {
     const transaction = new Transaction().add(
-      createAssociatedTokenAccountInstruction(
-        wallet.keypair.publicKey,
-        destinationTokenAccount,
-        destinationPubkey,
-        tokenMintPubkey
-      )
+      toWeb3Instruction(await getCreateAssociatedTokenInstructionAsync({
+        payer: wallet.keypair,
+        ata: asAddress(destinationTokenAccount),
+        owner: asAddress(destinationPubkey),
+        mint: asAddress(tokenMintPubkey),
+      }))
     );
 
-    const { blockhash } = await withTimeout(connection.getLatestBlockhash());
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = wallet.keypair.publicKey;
-    transaction.sign(wallet.keypair);
-
-    await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for account creation
+    await sendAndConfirm(transaction, [wallet.keypair]);
   }
 
-  const signature = await withTimeout(mintTo(
-    connection,
-    wallet.keypair,
-    tokenMintPubkey,
-    destinationTokenAccount,
-    wallet.keypair,
-    rawAmount
-  ), 30000);
+  const mintTransaction = new Transaction().add(toWeb3Instruction(getMintToInstruction({
+    mint: asAddress(tokenMintPubkey),
+    token: asAddress(destinationTokenAccount),
+    mintAuthority: wallet.keypair,
+    amount: rawAmount,
+  })));
+  const signature = await sendAndConfirm(mintTransaction, [wallet.keypair]);
 
   return {
     success: true,
@@ -1244,22 +1363,20 @@ async function handleBurnTokens(args: Record<string, unknown>) {
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
 
-  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
-  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+  const mintInfo = await getMintData(tokenMintPubkey);
+  const rawAmount = toRawAmount(amount, mintInfo.decimals);
 
-  const tokenAccount = await getAssociatedTokenAddress(
+  const tokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
     wallet.keypair.publicKey
   );
 
-  const signature = await withTimeout(burn(
-    connection,
-    wallet.keypair,
-    tokenAccount,
-    tokenMintPubkey,
-    wallet.keypair,
-    rawAmount
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getBurnInstruction({
+    account: asAddress(tokenAccount),
+    mint: asAddress(tokenMintPubkey),
+    authority: wallet.keypair,
+    amount: rawAmount,
+  }));
 
   return {
     success: true,
@@ -1286,13 +1403,11 @@ async function handleFreezeAccount(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const accountPubkey = new PublicKey(accountAddress);
 
-  const signature = await withTimeout(freezeAccount(
-    connection,
-    wallet.keypair,
-    accountPubkey,
-    tokenMintPubkey,
-    wallet.keypair
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getFreezeAccountInstruction({
+    account: asAddress(accountPubkey),
+    mint: asAddress(tokenMintPubkey),
+    owner: wallet.keypair,
+  }));
 
   return {
     success: true,
@@ -1318,13 +1433,11 @@ async function handleThawAccount(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const accountPubkey = new PublicKey(accountAddress);
 
-  const signature = await withTimeout(thawAccount(
-    connection,
-    wallet.keypair,
-    accountPubkey,
-    tokenMintPubkey,
-    wallet.keypair
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getThawAccountInstruction({
+    account: asAddress(accountPubkey),
+    mint: asAddress(tokenMintPubkey),
+    owner: wallet.keypair,
+  }));
 
   return {
     success: true,
@@ -1362,14 +1475,12 @@ async function handleSetTokenAuthority(args: Record<string, unknown>) {
 
   const resolvedAuthType = authorityTypeMap[authorityType];
 
-  const signature = await withTimeout(setAuthority(
-    connection,
-    wallet.keypair,
-    tokenMintPubkey,
-    wallet.keypair,
-    resolvedAuthType,
-    newAuthorityPubkey
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getSetAuthorityInstruction({
+    owned: asAddress(tokenMintPubkey),
+    owner: wallet.keypair,
+    authorityType: resolvedAuthType,
+    newAuthority: newAuthorityPubkey ? asAddress(newAuthorityPubkey) : null,
+  }));
 
   return {
     success: true,
@@ -1388,16 +1499,16 @@ async function handleGetTokenSupply(args: Record<string, unknown>) {
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
 
-  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
-  const supply = Number(mintInfo.supply) / Math.pow(10, mintInfo.decimals);
+  const mintInfo = await getMintData(tokenMintPubkey);
+  const supply = formatTokenAmount(mintInfo.supply, mintInfo.decimals);
 
   return {
     tokenMint,
     supply,
     rawSupply: mintInfo.supply.toString(),
     decimals: mintInfo.decimals,
-    mintAuthority: mintInfo.mintAuthority ? mintInfo.mintAuthority.toString() : null,
-    freezeAuthority: mintInfo.freezeAuthority ? mintInfo.freezeAuthority.toString() : null,
+    mintAuthority: optionValue<Address>(mintInfo.mintAuthority),
+    freezeAuthority: optionValue<Address>(mintInfo.freezeAuthority),
     isInitialized: mintInfo.isInitialized
   };
 }
@@ -1418,18 +1529,16 @@ async function handleCloseTokenAccount(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const destinationPubkey = new PublicKey(destinationAddress);
 
-  const tokenAccount = await getAssociatedTokenAddress(
+  const tokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
     wallet.keypair.publicKey
   );
 
-  const signature = await withTimeout(closeAccount(
-    connection,
-    wallet.keypair,
-    tokenAccount,
-    destinationPubkey,
-    wallet.keypair
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getCloseAccountInstruction({
+    account: asAddress(tokenAccount),
+    destination: asAddress(destinationPubkey),
+    owner: wallet.keypair,
+  }));
 
   return {
     success: true,
@@ -1457,22 +1566,20 @@ async function handleApproveDelegate(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const delegatePubkey = new PublicKey(delegateAddress);
 
-  const mintInfo = await withTimeout(getMint(connection, tokenMintPubkey));
-  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+  const mintInfo = await getMintData(tokenMintPubkey);
+  const rawAmount = toRawAmount(amount, mintInfo.decimals);
 
-  const tokenAccount = await getAssociatedTokenAddress(
+  const tokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
     wallet.keypair.publicKey
   );
 
-  const signature = await withTimeout(approve(
-    connection,
-    wallet.keypair,
-    tokenAccount,
-    delegatePubkey,
-    wallet.keypair,
-    rawAmount
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getApproveInstruction({
+    source: asAddress(tokenAccount),
+    delegate: asAddress(delegatePubkey),
+    owner: wallet.keypair,
+    amount: rawAmount,
+  }));
 
   return {
     success: true,
@@ -1497,17 +1604,15 @@ async function handleRevokeDelegate(args: Record<string, unknown>) {
   ensureConnection();
   const tokenMintPubkey = new PublicKey(tokenMint);
 
-  const tokenAccount = await getAssociatedTokenAddress(
+  const tokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
     wallet.keypair.publicKey
   );
 
-  const signature = await withTimeout(revoke(
-    connection,
-    wallet.keypair,
-    tokenAccount,
-    wallet.keypair
-  ), 30000);
+  const signature = await sendTokenInstruction(wallet.keypair, getRevokeInstruction({
+    source: asAddress(tokenAccount),
+    owner: wallet.keypair,
+  }));
 
   return {
     success: true,
@@ -1630,18 +1735,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     // Filter all output through PSM OutputFilter to redact secrets and PII.
     // Solana RPC can return account data containing sensitive information.
-    const rawOutput = JSON.stringify(result, null, 2);
+    // Solana web3.js v3 deliberately returns bigint for lossless RPC values.
+    // JSON has no bigint type, so expose exact decimal strings at the MCP edge.
+    // Amount fields (lamports, raw token amounts, block times) are held out of the filter and
+    // restored afterwards. The PII phone pattern matches any bare 10-digit run, so a balance of
+    // 1 SOL (1000000000 lamports) would otherwise come back as [REDACTED_PHONE]. Only the named
+    // keys are exempt, so any other digit run still goes through the filter, and array elements
+    // (which have numeric keys) never are.
+    const AMOUNT_KEYS = new Set(["balance", "uiBalance", "rawBalance", "lamports", "amount", "supply", "rawSupply", "decimals", "blockTime", "slot"]);
+    const held: string[] = [];
+    const rawOutput = JSON.stringify(
+      result,
+      (key, value) => {
+        const v = typeof value === "bigint" ? value.toString() : value;
+        const isNumeric = (typeof v === "string" && /^\d+$/.test(v)) || (typeof v === "number" && Number.isInteger(v));
+        if (!isNumeric || !AMOUNT_KEYS.has(key)) return v;
+        held.push(JSON.stringify(v));
+        return `__HELD_${held.length - 1}__`;
+      },
+      2
+    );
     const filtered = outputFilter.filter(rawOutput);
+    const text = filtered.text.replace(/"__HELD_(\d+)__"/g, (match, index) => held[Number(index)] ?? match);
 
     return {
       content: [
         {
           type: "text",
-          text: filtered.text,
+          text,
         },
       ],
     };
   } catch (error) {
+    if (error instanceof PendingTransactionError) {
+      // sanitizeError would redact the 88-character signature, so return it as JSON.
+      // Status is an error: the send is not confirmed. Check it before any resend.
+      const body = {
+        status: "sent_not_confirmed",
+        signature: error.signature,
+        explorerUrl: `https://explorer.solana.com/tx/${error.signature}?cluster=${currentNetwork}`,
+        note: "The transaction may still land or may have been dropped. Check it with get_transaction before retrying, or a retry can repeat the action.",
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(body, null, 2) }],
+        isError: true,
+      };
+    }
     return {
       content: [
         {

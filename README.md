@@ -2,10 +2,10 @@
 
 [![npm version](https://img.shields.io/npm/v/solana-mcp-server)](https://www.npmjs.com/package/solana-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node](https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/Node-%3E%3D20.18-339933?logo=node.js)](https://nodejs.org)
 [![Tools](https://img.shields.io/badge/tools-25-blue)](https://modelcontextprotocol.io)
 
-**Full Solana blockchain MCP server.** 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on `@solana/web3.js` and `@solana/spl-token`.
+**Full Solana blockchain MCP server.** 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on `@solana/web3.js` v3, Solana Kit, and the generated `@solana-program/token` client.
 
 Covers the SPL token lifecycle implemented in this repository: create, mint, burn, freeze, thaw, delegate, and authority management. The exact supported surface is listed below and exercised by the repository's tests and CI checks.
 
