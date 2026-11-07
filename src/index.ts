@@ -253,11 +253,7 @@ async function getMintData(mint: PublicKey) {
 
 async function sendTokenInstruction(wallet: Keypair, instruction: Instruction): Promise<string> {
   const transaction = new Transaction().add(toWeb3Instruction(instruction));
-  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = wallet.publicKey;
-  await transaction.sign(wallet);
-  return withTimeout(connection.sendTransaction(transaction, [wallet]), 30000);
+  return sendAndConfirm(transaction, [wallet]);
 }
 
 function optionValue<T>(option: unknown): T | null {
@@ -274,6 +270,41 @@ function formatTokenAmount(rawAmount: bigint, decimals: number): string {
   const whole = digits.slice(0, -decimals);
   const fraction = digits.slice(-decimals).replace(/0+$/, "");
   return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}
+
+/** Convert a UI token amount to base units. Going through toFixed avoids float error: 8.2 * 10**6 is 8199999.999999999 in floating point. */
+function toRawAmount(amount: number, decimals: number): bigint {
+  return BigInt(amount.toFixed(decimals).replace(".", ""));
+}
+
+/** Thrown when a transaction was sent but not confirmed in time. Carries the signature so the caller can check it. */
+class PendingTransactionError extends Error {
+  constructor(readonly signature: string) {
+    super(`Transaction ${signature} was sent but not confirmed in time.`);
+  }
+}
+
+/** Overview: sign, send, and wait for `confirmed` before returning, so a read right after the call sees the change. */
+async function sendAndConfirm(transaction: Transaction, signers: Keypair[]): Promise<string> {
+  const latest = await withTimeout(connection.getLatestBlockhash());
+  transaction.recentBlockhash = latest.blockhash;
+  transaction.feePayer = signers[0].publicKey;
+  await transaction.sign(...signers);
+  const signature = await withTimeout(connection.sendTransaction(transaction, signers), 30000);
+  let value;
+  try {
+    ({ value } = await withTimeout(
+      connection.confirmTransaction({ signature, blockhash: latest.blockhash, lastValidBlockHeight: latest.lastValidBlockHeight }, "confirmed"),
+      60000
+    ));
+  } catch {
+    // The transaction may still land. Do not let a caller resend it blindly (that can double a mint or transfer).
+    throw new PendingTransactionError(signature);
+  }
+  if (value.err) {
+    throw new Error(`Transaction ${signature} failed: ${JSON.stringify(value.err, (_key, v) => typeof v === "bigint" ? v.toString() : v)}`);
+  }
+  return signature;
 }
 
 /** Overwrite every stored keypair's secret bytes with random data, then clear the map. */
@@ -874,11 +905,13 @@ async function handleGetTokenBalance(args: Record<string, unknown>) {
 
   try {
     const accountInfo = await getTokenAccountData(tokenAccount);
+    const mintInfo = await getMintData(tokenMintPubkey);
 
     return {
       wallet: walletName,
       tokenMint: tokenMint,
       balance: accountInfo.amount.toString(),
+      uiBalance: formatTokenAmount(accountInfo.amount, mintInfo.decimals),
       mint: accountInfo.mint.toString()
     };
   } catch (error: unknown) {
@@ -889,6 +922,7 @@ async function handleGetTokenBalance(args: Record<string, unknown>) {
         wallet: walletName,
         tokenMint: tokenMint,
         balance: "0",
+        uiBalance: "0",
         note: "Token account does not exist for this wallet"
       };
     }
@@ -952,6 +986,7 @@ async function handleTransferTokens(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
   const toPubkey = new PublicKey(toAddress);
 
+  const mintInfo = await getMintData(tokenMintPubkey);
   const fromTokenAccount = await associatedTokenAddress(tokenMintPubkey, wallet.keypair.publicKey);
   const toTokenAccount = await associatedTokenAddress(tokenMintPubkey, toPubkey);
 
@@ -990,17 +1025,11 @@ async function handleTransferTokens(args: Record<string, unknown>) {
       source: asAddress(fromTokenAccount),
       destination: asAddress(toTokenAccount),
       authority: wallet.keypair,
-      amount: BigInt(Math.floor(amount)),
+      amount: toRawAmount(amount, mintInfo.decimals),
     }))
   );
 
-  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = wallet.keypair.publicKey;
-
-  await transaction.sign(wallet.keypair);
-
-  const signature = await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
+  const signature = await sendAndConfirm(transaction, [wallet.keypair]);
 
   return {
     success: true,
@@ -1234,11 +1263,7 @@ async function handleCreateSplToken(args: Record<string, unknown>) {
       freezeAuthority: freezeAuthorityPubkey ? asAddress(freezeAuthorityPubkey) : null,
     }))
   );
-  const { blockhash } = await withTimeout(connection.getLatestBlockhash());
-  transaction.recentBlockhash = blockhash;
-  transaction.feePayer = wallet.keypair.publicKey;
-  await transaction.sign(wallet.keypair, mintKeypair);
-  await withTimeout(connection.sendTransaction(transaction, [wallet.keypair, mintKeypair]), 30000);
+  await sendAndConfirm(transaction, [wallet.keypair, mintKeypair]);
   const mint = mintKeypair.publicKey;
 
   return {
@@ -1269,7 +1294,7 @@ async function handleMintTokens(args: Record<string, unknown>) {
   const destinationPubkey = new PublicKey(destinationAddress);
 
   const mintInfo = await getMintData(tokenMintPubkey);
-  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+  const rawAmount = toRawAmount(amount, mintInfo.decimals);
 
   const destinationTokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
@@ -1302,13 +1327,7 @@ async function handleMintTokens(args: Record<string, unknown>) {
       }))
     );
 
-    const { blockhash } = await withTimeout(connection.getLatestBlockhash());
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = wallet.keypair.publicKey;
-    await transaction.sign(wallet.keypair);
-
-    await withTimeout(connection.sendTransaction(transaction, [wallet.keypair]), 30000);
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for account creation
+    await sendAndConfirm(transaction, [wallet.keypair]);
   }
 
   const mintTransaction = new Transaction().add(toWeb3Instruction(getMintToInstruction({
@@ -1317,11 +1336,7 @@ async function handleMintTokens(args: Record<string, unknown>) {
     mintAuthority: wallet.keypair,
     amount: rawAmount,
   })));
-  const mintBlockhash = await withTimeout(connection.getLatestBlockhash());
-  mintTransaction.recentBlockhash = mintBlockhash.blockhash;
-  mintTransaction.feePayer = wallet.keypair.publicKey;
-  await mintTransaction.sign(wallet.keypair);
-  const signature = await withTimeout(connection.sendTransaction(mintTransaction, [wallet.keypair]), 30000);
+  const signature = await sendAndConfirm(mintTransaction, [wallet.keypair]);
 
   return {
     success: true,
@@ -1349,7 +1364,7 @@ async function handleBurnTokens(args: Record<string, unknown>) {
   const tokenMintPubkey = new PublicKey(tokenMint);
 
   const mintInfo = await getMintData(tokenMintPubkey);
-  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+  const rawAmount = toRawAmount(amount, mintInfo.decimals);
 
   const tokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
@@ -1552,7 +1567,7 @@ async function handleApproveDelegate(args: Record<string, unknown>) {
   const delegatePubkey = new PublicKey(delegateAddress);
 
   const mintInfo = await getMintData(tokenMintPubkey);
-  const rawAmount = BigInt(Math.floor(amount * Math.pow(10, mintInfo.decimals)));
+  const rawAmount = toRawAmount(amount, mintInfo.decimals);
 
   const tokenAccount = await associatedTokenAddress(
     tokenMintPubkey,
@@ -1722,22 +1737,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // Solana RPC can return account data containing sensitive information.
     // Solana web3.js v3 deliberately returns bigint for lossless RPC values.
     // JSON has no bigint type, so expose exact decimal strings at the MCP edge.
+    // Amount fields (lamports, raw token amounts, block times) are held out of the filter and
+    // restored afterwards. The PII phone pattern matches any bare 10-digit run, so a balance of
+    // 1 SOL (1000000000 lamports) would otherwise come back as [REDACTED_PHONE]. Only the named
+    // keys are exempt, so any other digit run still goes through the filter, and array elements
+    // (which have numeric keys) never are.
+    const AMOUNT_KEYS = new Set(["balance", "uiBalance", "rawBalance", "lamports", "amount", "supply", "rawSupply", "decimals", "blockTime", "slot"]);
+    const held: string[] = [];
     const rawOutput = JSON.stringify(
       result,
-      (_key, value) => typeof value === "bigint" ? value.toString() : value,
+      (key, value) => {
+        const v = typeof value === "bigint" ? value.toString() : value;
+        const isNumeric = (typeof v === "string" && /^\d+$/.test(v)) || (typeof v === "number" && Number.isInteger(v));
+        if (!isNumeric || !AMOUNT_KEYS.has(key)) return v;
+        held.push(JSON.stringify(v));
+        return `__HELD_${held.length - 1}__`;
+      },
       2
     );
     const filtered = outputFilter.filter(rawOutput);
+    const text = filtered.text.replace(/"__HELD_(\d+)__"/g, (match, index) => held[Number(index)] ?? match);
 
     return {
       content: [
         {
           type: "text",
-          text: filtered.text,
+          text,
         },
       ],
     };
   } catch (error) {
+    if (error instanceof PendingTransactionError) {
+      // sanitizeError would redact the 88-character signature, so return it as JSON.
+      // Status is an error: the send is not confirmed. Check it before any resend.
+      const body = {
+        status: "sent_not_confirmed",
+        signature: error.signature,
+        explorerUrl: `https://explorer.solana.com/tx/${error.signature}?cluster=${currentNetwork}`,
+        note: "The transaction may still land or may have been dropped. Check it with get_transaction before retrying, or a retry can repeat the action.",
+      };
+      return {
+        content: [{ type: "text", text: JSON.stringify(body, null, 2) }],
+        isError: true,
+      };
+    }
     return {
       content: [
         {
