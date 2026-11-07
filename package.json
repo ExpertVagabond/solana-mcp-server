@@ -34,7 +34,6 @@
     "quality": "npm run lint && npm run format:check && npm run type-check && npm run test"
   },
   "dependencies": {
-    "@coral-xyz/anchor": "^0.32.1",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "@solana/spl-token": "^0.4.8",
     "@solana/web3.js": "^1.95.2",
@@ -64,8 +63,7 @@
     "defi",
     "web3",
     "smart-contracts",
-    "spl-tokens",
-    "anchor"
+    "spl-tokens"
   ],
   "author": "ExpertVagabond",
   "license": "MIT",
@@ -76,8 +74,5 @@
   "bugs": {
     "url": "https://github.com/ExpertVagabond/solana-mcp-server/issues"
   },
-  "homepage": "https://github.com/ExpertVagabond/solana-mcp-server#readme",
-  "overrides": {
-    "toml": "^4.2.0"
-  }
+  "homepage": "https://github.com/ExpertVagabond/solana-mcp-server#readme"
 }

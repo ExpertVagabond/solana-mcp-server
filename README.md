@@ -5,9 +5,9 @@
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-339933?logo=node.js)](https://nodejs.org)
 [![Tools](https://img.shields.io/badge/tools-25-blue)](https://modelcontextprotocol.io)
 
-**Full Solana blockchain MCP server.** 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on `@solana/web3.js` and `@solana/spl-token` with Anchor support.
+**Full Solana blockchain MCP server.** 25 tools for wallet management, SPL token operations, DeFi, staking, and network queries. Built on `@solana/web3.js` and `@solana/spl-token`.
 
-Covers the SPL token lifecycle implemented in this repository: create, mint, burn, freeze, thaw, delegate, and authority management. The exact supported surface is listed below and tested through the repository's quality scripts.
+Covers the SPL token lifecycle implemented in this repository: create, mint, burn, freeze, thaw, delegate, and authority management. The exact supported surface is listed below and exercised by the repository's tests and CI checks.
 
 ## Install
 
@@ -101,7 +101,7 @@ Add to your MCP config (`claude_desktop_config.json` or `~/.mcp.json`):
 
 - **Complete SPL token lifecycle.** Create, mint, burn, freeze, thaw, set authority, delegate, close -- 10 token tools covering every operation. Competitors stop at create/transfer.
 - **Operational safeguards.** Lazy connection initialization, 10-second network-call timeouts, structured error handling, and Smithery deployment support.
-- **Anchor integration.** Built with `@coral-xyz/anchor` support for interacting with Anchor programs alongside raw SPL token operations.
+- **Direct Solana primitives.** Uses `@solana/web3.js` and `@solana/spl-token` directly, keeping the installed dependency surface aligned with the tools implemented here.
 
 ## Networks
 
