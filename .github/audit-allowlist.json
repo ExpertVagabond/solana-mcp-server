@@ -3,36 +3,6 @@
   "threshold": "moderate",
   "allow": [
     {
-      "id": "GHSA-3gc7-fjrx-p6mg",
-      "package": "bigint-buffer",
-      "reason": "Transitive via @solana/spl-token -> @solana/buffer-layout-utils. Upstream has no patched release; npm's only proposed fix is a downgrade to @solana/spl-token@0.1.8 (semver-major, pre-token-2022) which would break every token tool in this server.",
-      "expires": "2026-12-31"
-    },
-    {
-      "id": "GHSA-528h-pc64-c93x",
-      "package": "stream-json",
-      "reason": "Transitive via @solana/web3.js v1 -> jayson. Not reachable from this server: we never parse untrusted streamed JSON-RPC responses through jayson's stream path.",
-      "expires": "2026-12-31"
-    },
-    {
-      "id": "GHSA-hqr4-qq8f-hg3x",
-      "package": "stream-json",
-      "reason": "Same path as GHSA-528h-pc64-c93x. Verified unreachable: web3.js imports only jayson/lib/client/browser, which requires generateRequest and uuid; stream-json is loaded only by jayson/lib/utils.js, which that client never touches. Only fix npm offers is @solana/spl-token@0.1.8.",
-      "expires": "2026-12-31"
-    },
-    {
-      "id": "GHSA-mjw6-4jj6-33hc",
-      "package": "stream-json",
-      "reason": "Same path and reachability as GHSA-hqr4-qq8f-hg3x.",
-      "expires": "2026-12-31"
-    },
-    {
-      "id": "GHSA-w5hq-g745-h8pq",
-      "package": "uuid",
-      "reason": "Transitive via @solana/web3.js v1. Affects v3/v5/v6 with a caller-supplied buffer; web3.js calls uuid v4 with no buffer argument, so the bounds check is never reached.",
-      "expires": "2026-12-31"
-    },
-    {
       "id": "GHSA-3g3m-2fjr-6pw4",
       "package": "glob",
       "reason": "Development-only through ESLint and TypeDoc tooling. The published MCP server does not import glob or accept filesystem patterns. The patched glob 14 line is outside current upstream ranges; review when the lint and docs toolchain updates.",
