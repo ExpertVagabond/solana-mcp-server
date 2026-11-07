@@ -27,15 +27,21 @@
       "expires": "2026-12-31"
     },
     {
-      "id": "GHSA-hp3w-g68c-fv3c",
-      "package": "sprintf-js",
-      "reason": "Dev-only: ts-jest -> babel-plugin-istanbul -> @istanbuljs/load-nyc-config -> js-yaml -> argparse@1, which pins sprintf-js ~1.0.3. Runs only in coverage tooling, never shipped to npm users and never fed remote input.",
-      "expires": "2026-12-31"
-    },
-    {
       "id": "GHSA-w5hq-g745-h8pq",
       "package": "uuid",
       "reason": "Transitive via @solana/web3.js v1. Affects v3/v5/v6 with a caller-supplied buffer; web3.js calls uuid v4 with no buffer argument, so the bounds check is never reached.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-3g3m-2fjr-6pw4",
+      "package": "glob",
+      "reason": "Development-only through ESLint and TypeDoc tooling. The published MCP server does not import glob or accept filesystem patterns. The patched glob 14 line is outside current upstream ranges; review when the lint and docs toolchain updates.",
+      "expires": "2026-12-31"
+    },
+    {
+      "id": "GHSA-g3hv-75wg-m249",
+      "package": "minimatch",
+      "reason": "Development-only through ESLint and TypeDoc tooling. The server runtime does not import minimatch or evaluate user-supplied glob patterns. Dependabot confirmed current upstream ranges cannot resolve minimatch 11 without incompatible downgrades.",
       "expires": "2026-12-31"
     }
   ]
